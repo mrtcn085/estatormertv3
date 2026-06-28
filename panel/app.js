@@ -63,8 +63,8 @@ document.addEventListener('DOMContentLoaded', setupConfigButtons);
 let session = null;
 let currentUser = null;
 let cache = { kisiler: [], portfoyler: [], ilanlar: [], gorevler: [], notlar: [] };
-const sections = ['dashboard','arama','mahalle','kisiler','portfoyler','ilanlar','eslesme','mesajlar','gorevler','ayarlar'];
-const navNames = {dashboard:'📊 Dashboard',arama:'🔎 Müşteri Arama Asistanı',mahalle:'🗺️ Mahalle Takibi',kisiler:'👥 Kişiler',portfoyler:'🏘️ Portföyler',ilanlar:'🗂️ İlan Arşivi',eslesme:'🎯 Eşleştirme',gorevler:'✅ Görevler',mesajlar:'📣 Mesajlar',ayarlar:'⚙️ Ayarlar'};
+const sections = ['dashboard','arama','mobil','mahalle','kisiler','portfoyler','ilanlar','eslesme','mesajlar','gorevler','ayarlar'];
+const navNames = {dashboard:'📊 Dashboard',arama:'🔎 Müşteri Arama Asistanı',mobil:'📱 Mobil İlan Kaydet',mahalle:'🗺️ Mahalle Takibi',kisiler:'👥 Kişiler',portfoyler:'🏘️ Portföyler',ilanlar:'🗂️ İlan Arşivi',eslesme:'🎯 Eşleştirme',gorevler:'✅ Görevler',mesajlar:'📣 Mesajlar',ayarlar:'⚙️ Ayarlar'};
 
 const $ = (id)=>document.getElementById(id);
 const esc = (s)=>String(s ?? '').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
@@ -217,7 +217,7 @@ function showSec(id){ sections.forEach(s=>$(s).classList.toggle('active',s===id)
 async function loadAll(){ await Promise.all([loadTable('kisiler'),loadTable('portfoyler'),loadTable('ilan_arsivi','ilanlar'),loadTable('gorevler')]); normalizeCacheLocations(); renderAll(); }
 async function loadTable(table,key){ const {data,error}=await sb.from(table).select('*').order('created_at',{ascending:false}); if(error) alert(table+' yüklenemedi: '+error.message); else cache[key||table]=data||[]; }
 function renderAll(){ sections.forEach(renderSection); }
-function renderSection(id){ if(!currentUser) return; if(id==='dashboard') renderDashboard(); if(id==='arama') renderAramaAsistani(); if(id==='mahalle') renderMahalleTakibi(); if(id==='kisiler') renderKisiler(); if(id==='portfoyler') renderPortfoyler(); if(id==='ilanlar') renderIlanlar(); if(id==='eslesme') renderEslesme(); if(id==='mesajlar') renderMesajlar(); if(id==='gorevler') renderGorevler(); if(id==='ayarlar') renderAyarlar(); }
+function renderSection(id){ if(!currentUser) return; if(id==='dashboard') renderDashboard(); if(id==='arama') renderAramaAsistani(); if(id==='mobil') renderMobilIlanKaydet(); if(id==='mahalle') renderMahalleTakibi(); if(id==='kisiler') renderKisiler(); if(id==='portfoyler') renderPortfoyler(); if(id==='ilanlar') renderIlanlar(); if(id==='eslesme') renderEslesme(); if(id==='mesajlar') renderMesajlar(); if(id==='gorevler') renderGorevler(); if(id==='ayarlar') renderAyarlar(); }
 
 function renderDashboard(){
   const buyers=cache.kisiler.filter(k=>/alici|ikisi/.test(norm(k.tip))).length; const assets=[...cache.portfoyler, ...cache.ilanlar];
@@ -435,6 +435,63 @@ window.runCustomerSearch=()=>{
 window.saveSearchAsCustomer=async()=>{
   const name=val('ara_musteri')||'Yeni müşteri araması'; const oda=val('ara_oda')==='Diğer'?val('ara_oda_diger'):val('ara_oda');
   await upsert('kisiler',{tip:'Alıcı',ad_soyad:name,aranan_tur:val('ara_tur'),islem_tipi:val('ara_islem'),sehir:val('ara_sehir'),ilce:val('ara_ilce'),mahalle:val('ara_mahalle'),oda,butce_min:valNum('ara_min'),butce_max:valNum('ara_max'),notlar:'Müşteri Arama Asistanı üzerinden oluşturuldu.'});
+};
+
+
+function guessMobileTitle(){
+  const url=val('mobil_url');
+  const title=val('mobil_baslik');
+  if(title) return;
+  try{
+    const u=new URL(url);
+    const parts=u.pathname.split('/').filter(Boolean);
+    const last=parts.find(p=>/\d{6,}/.test(p)) ? parts[parts.length-2] : parts[parts.length-1];
+    const cleaned=String(last||'').replace(/-/g,' ').replace(/\b\d{6,}\b/g,'').trim();
+    if(cleaned) $('mobil_baslik').value=cleaned.replace(/\b\w/g,m=>m.toLocaleUpperCase('tr-TR'));
+  }catch(e){}
+}
+function extractIlanNoFromUrl(url){
+  const m=String(url||'').match(/(?:ilan|classified|\/)(\d{6,})(?:[/?#]|$)/i) || String(url||'').match(/(\d{7,})/);
+  return m ? m[1] : '';
+}
+function mobileListingForm(){
+  return `<div class="card"><h3>📱 Mobil İlan Kaydet</h3><div class="notice">Telefon/tablette Sahibinden ilanını açıp <b>Paylaş → Linki Kopyala</b> yap. Linki buraya yapıştır, hızlı bilgileri doldur ve ilan arşivine kaydet. Bu ekran siteyi otomatik taramaz; senin verdiğin bilgileri PortföyX arşivine alır.</div>
+  <div class="form-section"><h4>İlan Linki</h4><div class="field"><label>Sahibinden İlan Linki</label><input id="mobil_url" placeholder="https://www.sahibinden.com/ilan/..." oninput="guessMobileTitle()"></div><div class="row"><div class="field"><label>İlan No</label><input id="mobil_ilan_no" placeholder="Boş bırakırsan linkten bulunur"></div><div class="field"><label>Başlık</label><input id="mobil_baslik" placeholder="Örn: Arhavi 3+1 Kiralık Daire"></div></div></div>
+  <div class="form-section"><h4>Temel Bilgiler</h4><div class="row"><div class="field"><label>Tür</label><select id="mobil_tur"><option>Konut</option><option>İş Yeri</option><option>Arsa</option><option>Bina</option><option>Turistik Tesis</option><option>Devre Mülk</option><option>Konut Projesi</option></select></div><div class="field"><label>İşlem</label><select id="mobil_islem_tipi"><option>Kiralık</option><option>Satılık</option><option>Devren Kiralık</option><option>Devren Satılık</option><option>Kat Karşılığı Satılık</option></select></div>${moneyField('mobil_fiyat','Fiyat')}</div>${locationFields('mobil')}<div class="row">${odaField('mobil',ODA_KONUT)}<div class="field"><label>Brüt m²</label><input id="mobil_brut_m2" inputmode="numeric"></div><div class="field"><label>Net m²</label><input id="mobil_net_m2" inputmode="numeric"></div></div></div>
+  <div class="form-section"><h4>İlan Sahibi / İletişim</h4><div class="row"><div class="field"><label>İsim Soyisim</label><input id="mobil_ad_soyad"></div>${phoneField('mobil_telefon','Telefon')}</div><div class="field"><label>Not / Açıklama</label><textarea id="mobil_aciklama" placeholder="Telefonda konuştuğun notları veya ilan açıklamasını yazabilirsin"></textarea></div></div>
+  <div class="form-section"><h4>Görseller</h4><div class="field"><label>Telefondan fotoğraf ekle (en fazla 3)</label><input id="mobil_gorseller" type="file" accept="image/*" multiple></div><div class="field"><label>Foto URL, virgülle (opsiyonel)</label><input id="mobil_foto_urls" placeholder="https://...jpg, https://...webp"></div></div>
+  <div class="row"><button class="btn primary" onclick="saveMobilIlan()">Mobil İlanı Kaydet</button><button class="btn secondary" onclick="clearMobilIlanForm()">Formu Temizle</button></div><div id="mobilSaveStatus" class="muted" style="margin-top:10px">Hazır.</div></div>`;
+}
+function renderMobilIlanKaydet(){
+  $('mobil').innerHTML = `${mobileListingForm()}<div class="card"><h3>Son kaydedilen ilanlar</h3>${renderAssetCards(cache.ilanlar.slice(0,8).map(a=>({a,score:100,reasons:['ilan arşivi']})))}</div>`;
+}
+window.clearMobilIlanForm=()=>{
+  ['mobil_url','mobil_ilan_no','mobil_baslik','mobil_fiyat','mobil_sehir','mobil_ilce','mobil_mahalle','mobil_oda','mobil_oda_diger','mobil_brut_m2','mobil_net_m2','mobil_ad_soyad','mobil_telefon','mobil_aciklama','mobil_foto_urls'].forEach(id=>{const el=$(id); if(el) el.value='';});
+  const f=$('mobil_gorseller'); if(f) f.value='';
+  const st=$('mobilSaveStatus'); if(st) st.textContent='Form temizlendi.';
+};
+window.saveMobilIlan=async()=>{
+  const st=$('mobilSaveStatus');
+  try{
+    if(st) st.textContent='Mobil ilan kaydediliyor...';
+    const telefon=normalizePhoneForSave(val('mobil_telefon'));
+    if(!validatePhone(telefon)) return alert('Telefon 05XXXXXXXXX formatında 11 haneli olmalı.');
+    const url=val('mobil_url');
+    const ilan_no=val('mobil_ilan_no') || extractIlanNoFromUrl(url) || ('MOBIL-'+Date.now());
+    const oda=val('mobil_oda')==='Diğer'?val('mobil_oda_diger'):val('mobil_oda');
+    const uploaded=await uploadFiles('mobil_gorseller',`mobil-ilanlar/${ilan_no}`,3);
+    const urlPhotos=val('mobil_foto_urls').split(',').map(x=>x.trim()).filter(Boolean);
+    const foto_urls=[...uploaded.map(x=>x.url).filter(Boolean), ...urlPhotos].slice(0,8);
+    const detaylar={kaynak:'mobil_ilan_kaydet',dosyalar:{gorseller:uploaded},mobil_kayit_tarihi:new Date().toISOString()};
+    const obj={ilan_no,url,baslik:val('mobil_baslik')||[val('mobil_sehir'),val('mobil_ilce'),val('mobil_mahalle'),val('mobil_oda'),val('mobil_islem_tipi'),val('mobil_tur')].filter(Boolean).join(' '),tur:val('mobil_tur'),islem_tipi:val('mobil_islem_tipi'),fiyat:valNum('mobil_fiyat'),sehir:val('mobil_sehir'),ilce:val('mobil_ilce'),mahalle:val('mobil_mahalle'),konum:[val('mobil_sehir'),val('mobil_ilce'),val('mobil_mahalle')].filter(Boolean).join(' / '),oda,brut_m2:valNum('mobil_brut_m2'),net_m2:valNum('mobil_net_m2'),ad_soyad:val('mobil_ad_soyad'),telefon,aciklama:val('mobil_aciklama'),kimden:'Mobil kayıt',foto_urls,detaylar};
+    await upsert('ilan_arsivi',obj);
+    if(st) st.textContent='Kaydedildi. İlan arşivi, eşleştirme ve mahalle takibine dahil edildi.';
+    clearMobilIlanForm();
+    showSec('ilanlar');
+  }catch(e){
+    if(st) st.textContent='Hata: '+(e.message||e);
+    alert('Mobil ilan kaydedilemedi: '+(e.message||e));
+  }
 };
 
 let mahalleMap=null, mahalleLayer=null;

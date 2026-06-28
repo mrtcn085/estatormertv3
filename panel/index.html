@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Mertcan Emlak Komuta Merkezi Cloud</title>
+  <title>PortföyX Cloud</title>
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -13,9 +13,9 @@
 <body>
   <div id="loginView" class="login-shell">
     <div class="login card">
-      <div class="login-logo">🏠</div>
-      <h2>Mertcan Emlak Komuta Merkezi</h2>
-      <p class="muted">Cloud sürüm. V11 görünümü + Supabase kullanıcı ayrımı.</p>
+      <div class="login-logo">PX</div>
+      <h2>PortföyX</h2>
+      <p class="muted">Emlakçının akıllı portföy, müşteri ve mahalle takip paneli.</p>
       <div id="configWarn" class="notice" style="display:none">Supabase ayarı eksik. Aşağıdaki ayar kutusuna Project URL ve anon/publishable key yazıp kaydet.</div>
       <details id="cloudConfigBox" class="notice" open>
         <summary><b>Supabase Ayarı</b> — config.js uğraşmadan buradan kaydet</summary>
@@ -40,8 +40,8 @@
   <div id="appView" style="display:none">
     <header>
       <div>
-        <h1>🏠 Mertcan Emlak Komuta Merkezi</h1>
-        <div class="sub">Cloud panel · Sen ve arkadaşın ayrı kullanıcı hesabıyla çalışır · V11 koyu panel görünümü</div>
+        <h1>🏠 PortföyX</h1>
+        <div class="sub">Akıllı portföy yönetimi · Müşteri eşleştirme · Mahalle takibi · Cloud panel</div>
       </div>
       <div class="header-right">
         <div class="muted" id="userLine"></div>
@@ -54,6 +54,7 @@
       <main>
         <section id="dashboard" class="section active"></section>
         <section id="arama" class="section"></section>
+        <section id="mobil" class="section"></section>
         <section id="mahalle" class="section"></section>
         <section id="kisiler" class="section"></section>
         <section id="portfoyler" class="section"></section>
