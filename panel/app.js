@@ -63,8 +63,8 @@ document.addEventListener('DOMContentLoaded', setupConfigButtons);
 let session = null;
 let currentUser = null;
 let cache = { kisiler: [], portfoyler: [], ilanlar: [], gorevler: [], notlar: [] };
-const sections = ['dashboard','kisiler','portfoyler','ilanlar','eslesme','mesajlar','gorevler','ayarlar'];
-const navNames = {dashboard:'📊 Dashboard',kisiler:'👥 Kişiler',portfoyler:'🏘️ Portföyler',ilanlar:'🗂️ İlan Arşivi',eslesme:'🎯 Eşleştirme',gorevler:'✅ Görevler',mesajlar:'📣 Mesajlar',ayarlar:'⚙️ Ayarlar'};
+const sections = ['dashboard','arama','mahalle','kisiler','portfoyler','ilanlar','eslesme','mesajlar','gorevler','ayarlar'];
+const navNames = {dashboard:'📊 Dashboard',arama:'🔎 Müşteri Arama Asistanı',mahalle:'🗺️ Mahalle Takibi',kisiler:'👥 Kişiler',portfoyler:'🏘️ Portföyler',ilanlar:'🗂️ İlan Arşivi',eslesme:'🎯 Eşleştirme',gorevler:'✅ Görevler',mesajlar:'📣 Mesajlar',ayarlar:'⚙️ Ayarlar'};
 
 const $ = (id)=>document.getElementById(id);
 const esc = (s)=>String(s ?? '').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
@@ -182,7 +182,7 @@ function showSec(id){ sections.forEach(s=>$(s).classList.toggle('active',s===id)
 async function loadAll(){ await Promise.all([loadTable('kisiler'),loadTable('portfoyler'),loadTable('ilan_arsivi','ilanlar'),loadTable('gorevler')]); renderAll(); }
 async function loadTable(table,key){ const {data,error}=await sb.from(table).select('*').order('created_at',{ascending:false}); if(error) alert(table+' yüklenemedi: '+error.message); else cache[key||table]=data||[]; }
 function renderAll(){ sections.forEach(renderSection); }
-function renderSection(id){ if(!currentUser) return; if(id==='dashboard') renderDashboard(); if(id==='kisiler') renderKisiler(); if(id==='portfoyler') renderPortfoyler(); if(id==='ilanlar') renderIlanlar(); if(id==='eslesme') renderEslesme(); if(id==='mesajlar') renderMesajlar(); if(id==='gorevler') renderGorevler(); if(id==='ayarlar') renderAyarlar(); }
+function renderSection(id){ if(!currentUser) return; if(id==='dashboard') renderDashboard(); if(id==='arama') renderAramaAsistani(); if(id==='mahalle') renderMahalleTakibi(); if(id==='kisiler') renderKisiler(); if(id==='portfoyler') renderPortfoyler(); if(id==='ilanlar') renderIlanlar(); if(id==='eslesme') renderEslesme(); if(id==='mesajlar') renderMesajlar(); if(id==='gorevler') renderGorevler(); if(id==='ayarlar') renderAyarlar(); }
 
 function renderDashboard(){
   const buyers=cache.kisiler.filter(k=>/alici|ikisi/.test(norm(k.tip))).length; const assets=[...cache.portfoyler, ...cache.ilanlar];
@@ -284,6 +284,100 @@ window.prepareBulkWhatsApp=()=>{
   if(!people.length){ $('msgResults').innerHTML='<p class="notice">Önce en az bir kişi seç.</p>'; return; }
   $('msgResults').innerHTML=`<div class="table-wrap"><table class="table"><thead><tr><th>Kişi</th><th>Telefon</th><th>İşlem</th></tr></thead><tbody>${people.map(k=>{ const w=waTextLink(k.telefon,text); const c=callLink(k.telefon); return `<tr><td>${esc(k.ad_soyad||'-')}</td><td>${esc(formatTRPhone(k.telefon))}</td><td><a class="wa" target="_blank" href="${w}">💬 WhatsApp Aç</a> ${c?`<a class="call" href="${c}">📞 Direkt Ara</a>`:''}</td></tr>` }).join('')}</tbody></table></div>`;
 };
+
+
+function allAssets(){ return [...cache.portfoyler.map(x=>({...x,_type:'portfoy'})), ...cache.ilanlar.map(x=>({...x,_type:'ilan'}))]; }
+function assetPhone(a){ return a.telefon || a.satici_telefon || ''; }
+function assetTitle(a){ return a.baslik || a.ilan_no || 'Portföy/İlan'; }
+function assetPhoto(a){ const photos=photoMetas(a); const p=(photos[0]?.url || parseFirstPhoto(a.foto_urls) || ''); return p; }
+function sahibindenSearchUrl(q){ return 'https://www.sahibinden.com/arama?query=' + encodeURIComponent(q); }
+function filterAssetsByCriteria(c){
+  const min=num(c.min), max=num(c.max); const tg=typeGroup(c.tur); const tt=transType(c.islem); const oda=norm(c.oda); const sehir=norm(c.sehir); const ilce=norm(c.ilce); const mahalle=norm(c.mahalle);
+  return allAssets().map(a=>{
+    let score=0, reasons=[]; const price=estatePrice(a);
+    if(tg && typeGroup(a.tur||a.kategori||a.baslik)===tg){score+=25; reasons.push('tür');}
+    if(tt && transType(a.islem_tipi||a.baslik)===tt){score+=20; reasons.push('işlem');}
+    if(sehir && norm(a.sehir)===sehir){score+=10; reasons.push('şehir');}
+    if(ilce && norm(a.ilce)===ilce){score+=20; reasons.push('ilçe');}
+    if(mahalle && norm(a.mahalle).includes(mahalle.replace(/ mah\.?/,'').trim())){score+=20; reasons.push('mahalle');}
+    if(oda && norm(a.oda)===oda){score+=15; reasons.push('oda');}
+    if(price && (!min || price>=min) && (!max || price<=max)){score+=20; reasons.push('bütçe');}
+    else if(price && max && price<=max*1.15){score+=8; reasons.push('bütçeye yakın');}
+    return {a, score:Math.min(score,100), reasons};
+  }).filter(x=>x.score>=25).sort((x,y)=>y.score-x.score);
+}
+function renderAssetCards(rows){
+  if(!rows.length) return '<p class="muted">CRM içinde uygun kayıt bulunamadı. Sahibinden arama linkinden manuel kontrol edip uygun ilanları eklentiyle arşive alabilirsin.</p>';
+  return `<div class="cards-list">${rows.map(x=>{const a=x.a; const p=assetPhoto(a); const c=commission(a); return `<div class="result-card"><div>${p?`<img class="result-img" src="${esc(p)}">`:''}</div><div><b>${esc(assetTitle(a))}</b><br><span class="muted">${esc([a.tur,a.islem_tipi,a.sehir,a.ilce,a.mahalle,a.oda].filter(Boolean).join(' / '))}</span><br><b>${money(estatePrice(a))}</b><br>${compHtml(a)}<br><span class="muted">Skor: ${x.score} · ${esc(x.reasons.join(', '))}</span><br><span class="muted">${esc(c.text)}</span></div><div class="actions-stack">${a.url?`<a class="btn small" target="_blank" href="${esc(a.url)}">İlana git</a>`:''}${contactActions(assetPhone(a))}</div></div>`}).join('')}</div>`;
+}
+function renderAramaAsistani(){
+  $('arama').innerHTML=`<div class="card"><h3>🔎 Müşteri Arama Asistanı</h3><div class="notice">Bu ekran Sahibinden'i otomatik taramaz. CRM içindeki portföy/ilan arşivini eşleştirir ve aynı kriterlerle Sahibinden arama linki hazırlar.</div>
+  <div class="row"><div class="field"><label>Tür</label><select id="ara_tur"><option>Konut</option><option>İş Yeri</option><option>Arsa</option></select></div><div class="field"><label>İşlem</label><select id="ara_islem"><option>Kiralık</option><option>Satılık</option><option>Devren Kiralık</option><option>Devren Satılık</option></select></div>${odaField('ara',ODA_KISI)}</div>
+  ${locationFields('ara')}
+  <div class="row">${moneyField('ara_min','Bütçe Min')}${moneyField('ara_max','Bütçe Max')}<div class="field"><label>Müşteri Notu</label><input id="ara_musteri" placeholder="Örn: Ahmet Bey telefonda aradı"></div></div>
+  <div class="row"><button class="btn primary" onclick="runCustomerSearch()">Uygunları Önüme Getir</button><button class="btn secondary" onclick="saveSearchAsCustomer()">Bu Kriterle Kişi Oluştur</button></div><div id="aramaResults" style="margin-top:12px"></div></div>`;
+}
+window.runCustomerSearch=()=>{
+  const oda=val('ara_oda')==='Diğer'?val('ara_oda_diger'):val('ara_oda');
+  const c={tur:val('ara_tur'),islem:val('ara_islem'),sehir:val('ara_sehir'),ilce:val('ara_ilce'),mahalle:val('ara_mahalle'),oda,min:valNum('ara_min'),max:valNum('ara_max')};
+  const rows=filterAssetsByCriteria(c);
+  const q=[c.islem,c.tur,c.sehir,c.ilce,c.mahalle,oda,c.min?money(c.min):'',c.max?money(c.max):''].filter(Boolean).join(' ');
+  $('aramaResults').innerHTML=`<div class="grid"><div class="card"><b>${rows.length}</b><br><span class="muted">CRM içi uygun kayıt</span></div><div class="card"><b>${allAssets().length}</b><br><span class="muted">Toplam portföy/ilan</span></div></div><div class="card" style="margin-top:12px"><h4>Sahibinden hazır arama</h4><p class="muted">Aşağıdaki link sadece arama sayfasını açar; ilanları otomatik çekmez.</p><a class="btn primary" target="_blank" href="${sahibindenSearchUrl(q)}">Sahibinden'de Bu Kriterle Ara</a></div><div class="card" style="margin-top:12px"><h4>CRM içinde uygun kayıtlar</h4>${renderAssetCards(rows)}</div>`;
+};
+window.saveSearchAsCustomer=async()=>{
+  const name=val('ara_musteri')||'Yeni müşteri araması'; const oda=val('ara_oda')==='Diğer'?val('ara_oda_diger'):val('ara_oda');
+  await upsert('kisiler',{tip:'Alıcı',ad_soyad:name,aranan_tur:val('ara_tur'),islem_tipi:val('ara_islem'),sehir:val('ara_sehir'),ilce:val('ara_ilce'),mahalle:val('ara_mahalle'),oda,butce_min:valNum('ara_min'),butce_max:valNum('ara_max'),notlar:'Müşteri Arama Asistanı üzerinden oluşturuldu.'});
+};
+
+let mahalleMap=null, mahalleLayer=null;
+function renderMahalleTakibi(){
+  $('mahalle').innerHTML=`<div class="card"><h3>🗺️ Mahalle Takibi</h3><div class="notice">Harita, CRM'e kaydettiğin portföyler ve ilan arşivindeki kayıtları gösterir. Sahibinden'deki tüm ilanları otomatik çekmez.</div><div class="row"><button class="btn primary" onclick="initMahalleMap()">Konumuma Göre Haritayı Aç</button><button class="btn" onclick="plotMahalleAssets()">İlanları Haritada Göster</button><button class="btn secondary" onclick="fitMapToAssets()">Haritayı İlanlara Yaklaştır</button></div><div id="mapStatus" class="muted">Haritayı açmak için butona bas.</div><div id="mahalleMap" class="mapbox"></div><div class="card" style="margin-top:12px"><h4>Harita verisi</h4><div class="muted">${allAssets().length} kayıt haritaya yerleştirilmeye çalışılacak. Konumu net olmayan kayıtlar ilçe/mahalle merkezine yakın gösterilebilir.</div></div></div>`;
+  setTimeout(()=>initMahalleMap(false),50);
+}
+function fallbackCenter(){ return [41.390,41.420]; }
+function locKey(a){ return [a.sehir,a.ilce,a.mahalle].filter(Boolean).join(' / ') || 'Artvin Hopa'; }
+function localCoordFor(a){
+  const key=norm(locKey(a));
+  const known=[
+    [/hopa.*sundura/,[41.399,41.424]],[/hopa.*ortahopa/,[41.390,41.418]],[/hopa/,[41.390,41.418]],
+    [/arhavi/,[41.351,41.304]],[/kemalpasa/,[41.486,41.528]],[/artvin/,[41.182,41.819]],
+    [/rize/,[41.025,40.517]],[/trabzon/,[41.005,39.730]]
+  ];
+  const f=known.find(([re])=>re.test(key)); return f?f[1]:null;
+}
+async function geocodeAsset(a){
+  const key='geo_'+norm(locKey(a));
+  try{ const cached=JSON.parse(localStorage.getItem(key)||'null'); if(cached) return cached; }catch{}
+  const local=localCoordFor(a); if(local){ localStorage.setItem(key,JSON.stringify(local)); return local; }
+  try{
+    const q=[a.mahalle,a.ilce,a.sehir,'Türkiye'].filter(Boolean).join(', ');
+    const res=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q='+encodeURIComponent(q));
+    const data=await res.json();
+    if(data && data[0]){ const pos=[Number(data[0].lat),Number(data[0].lon)]; localStorage.setItem(key,JSON.stringify(pos)); return pos; }
+  }catch(e){}
+  return fallbackCenter();
+}
+window.initMahalleMap=(ask=true)=>{
+  if(!window.L){ $('mapStatus').textContent='Harita kütüphanesi yüklenemedi. Sayfayı yenile.'; return; }
+  if(mahalleMap){ mahalleMap.invalidateSize(); return; }
+  mahalleMap=L.map('mahalleMap').setView(fallbackCenter(),13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19, attribution:'© OpenStreetMap'}).addTo(mahalleMap);
+  mahalleLayer=L.layerGroup().addTo(mahalleMap);
+  if(ask && navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(pos=>{ const p=[pos.coords.latitude,pos.coords.longitude]; mahalleMap.setView(p,14); L.circleMarker(p,{radius:8}).addTo(mahalleMap).bindPopup('Şu anki konumun'); plotMahalleAssets(); },()=>plotMahalleAssets(),{enableHighAccuracy:true,timeout:7000});
+  } else plotMahalleAssets();
+};
+function markerPopup(a){ const p=assetPhoto(a); const phone=assetPhone(a); const foto=p?`<img src="${esc(p)}" style="width:170px;height:95px;object-fit:cover;border-radius:10px;margin-bottom:6px">`:''; return `<div class="map-popup">${foto}<b>${esc(assetTitle(a))}</b><br><span>${esc([a.islem_tipi,a.tur,a.sehir,a.ilce,a.mahalle].filter(Boolean).join(' / '))}</span><br><b>${money(estatePrice(a))}</b><br>${a.url?`<a target="_blank" href="${esc(a.url)}">İlana git</a><br>`:''}${phone?`${waHtml(phone)} ${callHtml(phone)}`:''}</div>`; }
+window.plotMahalleAssets=async()=>{
+  if(!mahalleMap) initMahalleMap(false);
+  if(!mahalleLayer) return;
+  mahalleLayer.clearLayers();
+  const assets=allAssets().filter(a=>a.sehir||a.ilce||a.mahalle);
+  $('mapStatus').textContent=`${assets.length} kayıt haritaya yerleştiriliyor...`;
+  for(const a of assets){ const pos=await geocodeAsset(a); const off=(Math.random()-0.5)*0.002; L.marker([pos[0]+off,pos[1]+off]).addTo(mahalleLayer).bindPopup(markerPopup(a)); }
+  $('mapStatus').textContent=`${assets.length} kayıt haritada gösterildi.`;
+};
+window.fitMapToAssets=()=>{ if(!mahalleLayer || !mahalleMap) return; const layers=mahalleLayer.getLayers(); if(!layers.length) return; mahalleMap.fitBounds(L.featureGroup(layers).getBounds().pad(.25)); };
 
 function renderGorevler(){ $('gorevler').innerHTML=`<div class="two"><div class="card"><h3>Görev Ekle</h3><div class="field"><label>Başlık</label><input id="gorev_baslik"></div><div class="field"><label>Tarih</label><input id="gorev_tarih" type="date"></div><div class="field"><label>Açıklama</label><textarea id="gorev_aciklama"></textarea></div><button class="btn" onclick="saveGorev()">Kaydet</button></div><div class="card"><h3>Görevler</h3>${tableGorev()}</div></div>`; }
 window.saveGorev=()=>upsert('gorevler',{baslik:val('gorev_baslik'),tarih:val('gorev_tarih')||null,aciklama:val('gorev_aciklama')});

@@ -5,8 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Mertcan Emlak Komuta Merkezi Cloud</title>
   <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 <body>
   <div id="loginView" class="login-shell">
@@ -51,6 +53,8 @@
       <nav id="nav"></nav>
       <main>
         <section id="dashboard" class="section active"></section>
+        <section id="arama" class="section"></section>
+        <section id="mahalle" class="section"></section>
         <section id="kisiler" class="section"></section>
         <section id="portfoyler" class="section"></section>
         <section id="ilanlar" class="section"></section>

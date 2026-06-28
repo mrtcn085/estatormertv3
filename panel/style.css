@@ -108,3 +108,8 @@ input[type="file"]{padding:8px;background:#0b1220}
   .actions-stack{flex-direction:row;flex-wrap:wrap}
   .thumb{width:120px;height:86px}
 }
+
+
+/* V12.8 - Müşteri Arama Asistanı + Mahalle Takibi */
+.cards-list{display:flex;flex-direction:column;gap:12px}.result-card{display:grid;grid-template-columns:130px 1fr auto;gap:12px;align-items:center;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:14px;padding:12px}.result-img{width:130px;height:90px;object-fit:cover;border-radius:12px;background:#111}.mapbox{height:68vh;min-height:460px;border-radius:18px;border:1px solid rgba(255,255,255,.12);overflow:hidden;background:#111;margin-top:12px}.map-popup{color:#111;min-width:190px}.map-popup a.wa,.map-popup a.call{display:inline-block;margin-top:5px;text-decoration:none;padding:6px 8px;border-radius:8px;background:#10b981;color:white}.map-popup a.call{background:#3b82f6}.leaflet-popup-content-wrapper{border-radius:14px}.leaflet-container{font-family:inherit}.section#mahalle .notice,.section#arama .notice{line-height:1.45}
+@media(max-width:800px){.result-card{grid-template-columns:1fr}.result-img{width:100%;height:180px}.mapbox{height:70vh;min-height:420px}.layout{grid-template-columns:1fr}nav{position:sticky;top:0;z-index:10;display:flex;overflow:auto;gap:8px;padding-bottom:8px}nav button{min-width:max-content}.row{grid-template-columns:1fr!important;display:grid!important}.two,.grid{grid-template-columns:1fr!important}.table-wrap{overflow:auto}.btn,.segbtn,a.wa,a.call{min-height:42px;font-size:15px}}
