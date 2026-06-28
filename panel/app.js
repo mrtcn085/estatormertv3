@@ -147,6 +147,41 @@ const MAHALLE_HINTS={
   'Arhavi':['Musazade Mah.','Boğaziçi Mah.','Kavak Mah.','Yukarı Hacılar Mah.','Aşağı Hacılar Mah.'],
   'Kemalpaşa':['Merkez Mah.','Köprücü Mah.','Çamurlu Mah.']
 };
+
+function detectLocationFromText(txt){
+  const raw=String(txt||''); const nt=norm(raw); if(!nt) return null;
+  const candidates=[];
+  for(const [sehir,ilceler] of Object.entries(ILCE_MAP)){
+    const si=nt.indexOf(norm(sehir)); if(si<0) continue;
+    for(const ilce of ilceler){ const ii=nt.indexOf(norm(ilce)); if(ii<0) continue; candidates.push({sehir,ilce,score:(ilce==='Merkez'?100:0)+Math.abs(ii-si)}); }
+  }
+  if(!candidates.length) return null;
+  candidates.sort((a,b)=>a.score-b.score);
+  const best=candidates[0]; let mahalle='';
+  const parts=String(raw).split(/\n|\r|\/|>|›|»|,|\|/).map(x=>String(x||'').replace(/\s+/g,' ').trim()).filter(Boolean);
+  const idx=parts.findIndex(x=>norm(x)===norm(best.ilce));
+  if(idx>=0){
+    for(let j=idx+1;j<Math.min(parts.length,idx+4);j++){
+      const cand=parts[j];
+      if(cand && cand.length<80 && !/emlak|konut|arsa|iş yeri|satılık|kiralık|ilan|tl|m²/i.test(cand) && !Object.keys(ILCE_MAP).some(p=>norm(p)===norm(cand)) && !(ILCE_MAP[best.sehir]||[]).some(d=>norm(d)===norm(cand))){ mahalle=cand; break; }
+    }
+  }
+  if(!mahalle){ const hints=MAHALLE_HINTS[best.ilce]||[]; const found=hints.find(h=>nt.includes(norm(h).replace(/ mah\.?$/,''))); if(found) mahalle=found; }
+  return {sehir:best.sehir, ilce:best.ilce, mahalle};
+}
+function applyLocationFixToRecord(a){
+  if(!a) return a;
+  const loc=detectLocationFromText([a.konum,a.baslik,a.aciklama].filter(Boolean).join(' / '));
+  if(loc && loc.sehir && loc.ilce){
+    if(!a.sehir || norm(a.sehir)!==norm(loc.sehir)) a.sehir=loc.sehir;
+    if(!a.ilce || norm(a.ilce)==='merkez' || norm(a.ilce)!==norm(loc.ilce)) a.ilce=loc.ilce;
+    if(loc.mahalle && (!a.mahalle || norm(a.mahalle)!==norm(loc.mahalle))) a.mahalle=loc.mahalle;
+  }
+  return a;
+}
+function normalizeCacheLocations(){
+  ['ilanlar','portfoyler'].forEach(k=>{ cache[k]=(cache[k]||[]).map(x=>applyLocationFixToRecord({...x})); });
+}
 const ODA_KISI=['1+1','2+1','3+1','4+1','5+1','Diğer'];
 const ODA_KONUT=['1+1','2+1','3+1','4+1','Dublex','Diğer'];
 const PORTFOY_TURLER=['Konut','İş Yeri','Arsa','Bina','Turistik Tesis','Devre Mülk','Konut Projesi'];
@@ -179,7 +214,7 @@ function updateAuthView(){
 }
 function buildNav(){ $('nav').innerHTML=sections.map(s=>`<button data-sec="${s}" class="${s==='dashboard'?'active':''}">${navNames[s]}</button>`).join(''); document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>showSec(b.dataset.sec)); }
 function showSec(id){ sections.forEach(s=>$(s).classList.toggle('active',s===id)); document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.sec===id)); renderSection(id); }
-async function loadAll(){ await Promise.all([loadTable('kisiler'),loadTable('portfoyler'),loadTable('ilan_arsivi','ilanlar'),loadTable('gorevler')]); renderAll(); }
+async function loadAll(){ await Promise.all([loadTable('kisiler'),loadTable('portfoyler'),loadTable('ilan_arsivi','ilanlar'),loadTable('gorevler')]); normalizeCacheLocations(); renderAll(); }
 async function loadTable(table,key){ const {data,error}=await sb.from(table).select('*').order('created_at',{ascending:false}); if(error) alert(table+' yüklenemedi: '+error.message); else cache[key||table]=data||[]; }
 function renderAll(){ sections.forEach(renderSection); }
 function renderSection(id){ if(!currentUser) return; if(id==='dashboard') renderDashboard(); if(id==='arama') renderAramaAsistani(); if(id==='mahalle') renderMahalleTakibi(); if(id==='kisiler') renderKisiler(); if(id==='portfoyler') renderPortfoyler(); if(id==='ilanlar') renderIlanlar(); if(id==='eslesme') renderEslesme(); if(id==='mesajlar') renderMesajlar(); if(id==='gorevler') renderGorevler(); if(id==='ayarlar') renderAyarlar(); }
@@ -290,7 +325,76 @@ function allAssets(){ return [...cache.portfoyler.map(x=>({...x,_type:'portfoy'}
 function assetPhone(a){ return a.telefon || a.satici_telefon || ''; }
 function assetTitle(a){ return a.baslik || a.ilan_no || 'Portföy/İlan'; }
 function assetPhoto(a){ const photos=photoMetas(a); const p=(photos[0]?.url || parseFirstPhoto(a.foto_urls) || ''); return p; }
-function sahibindenSearchUrl(q){ return 'https://www.sahibinden.com/arama?query=' + encodeURIComponent(q); }
+
+function slugTR(v){
+  return String(v||'').trim().toLocaleLowerCase('tr-TR')
+    .replace(/ğ/g,'g').replace(/ü/g,'u').replace(/ş/g,'s').replace(/ı/g,'i').replace(/ö/g,'o').replace(/ç/g,'c')
+    .replace(/İ/g,'i').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+}
+function categorySlug(tur,islem,oda){
+  const tg=typeGroup(tur); const tt=transType(islem);
+  if(tg==='konut'){
+    // Müşteri arama asistanında konut için en pratik sonuç sayfası daire kategorisi.
+    // Villa/müstakil gibi özel arama istenirse kelime arama yedek linkinde zaten aranır.
+    return tt==='kiralik' ? 'kiralik-daire' : 'satilik-daire';
+  }
+  if(tg==='isyeri'){
+    if(tt==='kiralik') return 'kiralik-isyeri';
+    if(tt==='devren-kiralik') return 'devren-kiralik-isyeri';
+    if(tt==='devren-satilik') return 'devren-satilik-isyeri';
+    return 'satilik-isyeri';
+  }
+  if(tg==='arsa'){
+    if(tt==='kiralik') return 'kiralik-arsa';
+    if(tt==='kat-karsiligi') return 'kat-karsiligi-arsa';
+    return 'satilik-arsa';
+  }
+  return tt==='kiralik' ? 'kiralik-daire' : 'satilik-daire';
+}
+function buildQueryParams(obj){
+  const ps=[];
+  Object.entries(obj).forEach(([k,v])=>{ if(v!==undefined && v!==null && String(v).trim()!=='') ps.push(encodeURIComponent(k)+'='+encodeURIComponent(String(v))); });
+  return ps.length ? '?' + ps.join('&') : '';
+}
+function sahibindenSearchLinks(c){
+  const cat=categorySlug(c.tur,c.islem,c.oda);
+  const city=slugTR(c.sehir);
+  const district=slugTR(c.ilce);
+  const mahalle=String(c.mahalle||'').replace(/mah\.?|mahallesi/ig,'').trim();
+  const oda=String(c.oda||'').trim();
+  const path = city && district ? `${city}-${district}` : (city || '');
+  const min=num(c.min), max=num(c.max);
+  const priceParams={};
+  if(min) priceParams.price_min=min;
+  if(max) priceParams.price_max=max;
+  priceParams.sorting='date_desc';
+
+  // Sahibinden URL'lerinde mahalle/oda bilgisini query_text'e gömmek bazı durumlarda sonucu tamamen sıfırlıyor.
+  // Bu yüzden ilk link geniş ilçe linkidir; kullanıcı Sahibinden içindeki sol filtrelerle oda/mahalle daraltır.
+  const districtWide='https://www.sahibinden.com/' + cat + (path?('/'+path):'') + buildQueryParams({sorting:'date_desc'});
+  const districtPrice='https://www.sahibinden.com/' + cat + (path?('/'+path):'') + buildQueryParams(priceParams);
+
+  const cityWide='https://www.sahibinden.com/' + cat + (city?('/'+city):'') + buildQueryParams({sorting:'date_desc'});
+
+  const qExact=[c.islem,c.tur,c.sehir,c.ilce,mahalle,oda,min?String(min):'',max?String(max):''].filter(Boolean).join(' ');
+  const qLoose=[c.islem,c.tur,c.sehir,c.ilce,mahalle,oda].filter(Boolean).join(' ');
+  const qVeryLoose=[c.islem,c.tur,c.sehir,c.ilce].filter(Boolean).join(' ');
+
+  const keywordExact='https://www.sahibinden.com/kelime-ile-arama?query=' + encodeURIComponent(qExact);
+  const keywordLoose='https://www.sahibinden.com/kelime-ile-arama?query=' + encodeURIComponent(qLoose);
+  const general='https://www.sahibinden.com/arama?query=' + encodeURIComponent(qVeryLoose);
+
+  return [
+    {label:'1) İlçe Kategori Linki - En Sağlam', url:districtWide, note:'Önce bunu aç. Sonra Sahibinden içinde fiyat, oda ve mahalle filtresini elle seç. Boş sonuç riskini en çok azaltan link budur.'},
+    {label:'2) İlçe + Fiyat Linki', url:districtPrice, note:'Bütçe aralığını da ekler. Sonuç boşsa 1. linke dön.'},
+    {label:'3) İl Geneli Yedek Link', url:cityWide, note:'İlçe linki Sahibinden tarafında sonuç vermezse il geneline çıkar.'},
+    {label:'4) Kelime Araması - Detaylı', url:keywordExact, note:'Kriterlerin tamamını kelime olarak arar; bazen çok dar olduğu için boş dönebilir.'},
+    {label:'5) Kelime Araması - Geniş', url:keywordLoose, note:'Fiyat olmadan arar; daha çok sonuç getirir.'},
+    {label:'6) Genel Arama Yedeği', url:general, note:'Son yedek link.'},
+  ];
+}
+function sahibindenSearchUrl(q){ return 'https://www.sahibinden.com/kelime-ile-arama?query=' + encodeURIComponent(q); }
+
 function filterAssetsByCriteria(c){
   const min=num(c.min), max=num(c.max); const tg=typeGroup(c.tur); const tt=transType(c.islem); const oda=norm(c.oda); const sehir=norm(c.sehir); const ilce=norm(c.ilce); const mahalle=norm(c.mahalle);
   return allAssets().map(a=>{
@@ -306,12 +410,15 @@ function filterAssetsByCriteria(c){
     return {a, score:Math.min(score,100), reasons};
   }).filter(x=>x.score>=25).sort((x,y)=>y.score-x.score);
 }
+
+window.copyText=async(t)=>{ try{ await navigator.clipboard.writeText(t); alert('Link kopyalandı'); }catch(e){ prompt('Linki kopyala:', t); } };
+
 function renderAssetCards(rows){
   if(!rows.length) return '<p class="muted">CRM içinde uygun kayıt bulunamadı. Sahibinden arama linkinden manuel kontrol edip uygun ilanları eklentiyle arşive alabilirsin.</p>';
   return `<div class="cards-list">${rows.map(x=>{const a=x.a; const p=assetPhoto(a); const c=commission(a); return `<div class="result-card"><div>${p?`<img class="result-img" src="${esc(p)}">`:''}</div><div><b>${esc(assetTitle(a))}</b><br><span class="muted">${esc([a.tur,a.islem_tipi,a.sehir,a.ilce,a.mahalle,a.oda].filter(Boolean).join(' / '))}</span><br><b>${money(estatePrice(a))}</b><br>${compHtml(a)}<br><span class="muted">Skor: ${x.score} · ${esc(x.reasons.join(', '))}</span><br><span class="muted">${esc(c.text)}</span></div><div class="actions-stack">${a.url?`<a class="btn small" target="_blank" href="${esc(a.url)}">İlana git</a>`:''}${contactActions(assetPhone(a))}</div></div>`}).join('')}</div>`;
 }
 function renderAramaAsistani(){
-  $('arama').innerHTML=`<div class="card"><h3>🔎 Müşteri Arama Asistanı</h3><div class="notice">Bu ekran Sahibinden'i otomatik taramaz. CRM içindeki portföy/ilan arşivini eşleştirir ve aynı kriterlerle Sahibinden arama linki hazırlar.</div>
+  $('arama').innerHTML=`<div class="card"><h3>🔎 Müşteri Arama Asistanı</h3><div class="notice">Bu ekran Sahibinden'i otomatik taramaz. CRM içindeki portföy/ilan arşivini eşleştirir ve Sahibinden için sağlam arama bağlantıları hazırlar. İlk bağlantı özellikle geniş tutulur; site içinde oda/mahalle/fiyatı elle daraltabilirsin.</div>
   <div class="row"><div class="field"><label>Tür</label><select id="ara_tur"><option>Konut</option><option>İş Yeri</option><option>Arsa</option></select></div><div class="field"><label>İşlem</label><select id="ara_islem"><option>Kiralık</option><option>Satılık</option><option>Devren Kiralık</option><option>Devren Satılık</option></select></div>${odaField('ara',ODA_KISI)}</div>
   ${locationFields('ara')}
   <div class="row">${moneyField('ara_min','Bütçe Min')}${moneyField('ara_max','Bütçe Max')}<div class="field"><label>Müşteri Notu</label><input id="ara_musteri" placeholder="Örn: Ahmet Bey telefonda aradı"></div></div>
@@ -321,8 +428,9 @@ window.runCustomerSearch=()=>{
   const oda=val('ara_oda')==='Diğer'?val('ara_oda_diger'):val('ara_oda');
   const c={tur:val('ara_tur'),islem:val('ara_islem'),sehir:val('ara_sehir'),ilce:val('ara_ilce'),mahalle:val('ara_mahalle'),oda,min:valNum('ara_min'),max:valNum('ara_max')};
   const rows=filterAssetsByCriteria(c);
-  const q=[c.islem,c.tur,c.sehir,c.ilce,c.mahalle,oda,c.min?money(c.min):'',c.max?money(c.max):''].filter(Boolean).join(' ');
-  $('aramaResults').innerHTML=`<div class="grid"><div class="card"><b>${rows.length}</b><br><span class="muted">CRM içi uygun kayıt</span></div><div class="card"><b>${allAssets().length}</b><br><span class="muted">Toplam portföy/ilan</span></div></div><div class="card" style="margin-top:12px"><h4>Sahibinden hazır arama</h4><p class="muted">Aşağıdaki link sadece arama sayfasını açar; ilanları otomatik çekmez.</p><a class="btn primary" target="_blank" href="${sahibindenSearchUrl(q)}">Sahibinden'de Bu Kriterle Ara</a></div><div class="card" style="margin-top:12px"><h4>CRM içinde uygun kayıtlar</h4>${renderAssetCards(rows)}</div>`;
+  const links=sahibindenSearchLinks(c);
+  const linkHtml=links.map((l,i)=>`<div class="result-card"><div><b>${i+1}. ${esc(l.label)}</b><br><span class="muted">${esc(l.note)}</span><br><span class="muted small-url">${esc(l.url)}</span></div><div class="actions-stack"><a class="btn ${i===0?'primary':'secondary'}" target="_blank" href="${esc(l.url)}">Aç</a><button class="btn small" onclick="copyText('${esc(l.url).replace(/'/g,"\\'")}')">Linki Kopyala</button></div></div>`).join('');
+  $('aramaResults').innerHTML=`<div class="grid"><div class="card"><b>${rows.length}</b><br><span class="muted">CRM içi uygun kayıt</span></div><div class="card"><b>${allAssets().length}</b><br><span class="muted">Toplam portföy/ilan</span></div></div><div class="card" style="margin-top:12px"><h4>Sahibinden hazır arama</h4><p class="muted">Aşağıdaki bağlantılar ilanları otomatik çekmez; kriterlerine göre Sahibinden sonuç sayfasını açar. İlk link geniş ilçe linkidir. Boş çıkarsa ikinci/üçüncü yedek linkleri dene; Sahibinden içinde fiyat/oda/mahalle filtresini elle daralt.</p>${linkHtml}</div><div class="card" style="margin-top:12px"><h4>CRM içinde uygun kayıtlar</h4>${renderAssetCards(rows)}</div>`;
 };
 window.saveSearchAsCustomer=async()=>{
   const name=val('ara_musteri')||'Yeni müşteri araması'; const oda=val('ara_oda')==='Diğer'?val('ara_oda_diger'):val('ara_oda');
@@ -336,7 +444,7 @@ function renderMahalleTakibi(){
   // Bölüm yeniden çizilirken eski Leaflet nesnesini temizleyip kullanıcı butonuyla kuruyoruz.
   try{ if(mahalleMap && mahalleMap.remove) mahalleMap.remove(); }catch(e){}
   mahalleMap=null; mahalleLayer=null; mahalleMapRendered=false;
-  $('mahalle').innerHTML=`<div class="card"><h3>🗺️ Mahalle Takibi</h3><div class="notice">Harita, CRM'e kaydettiğin portföyler ve ilan arşivindeki kayıtları gösterir. Sahibinden'deki tüm ilanları otomatik çekmez. Ekran siyah/boş kalırsa "Haritayı Yenile" butonuna bas.</div><div class="row"><button class="btn primary" onclick="initMahalleMap(true)">Konumuma Göre Haritayı Aç</button><button class="btn" onclick="plotMahalleAssets()">İlanları Haritada Göster</button><button class="btn secondary" onclick="fitMapToAssets()">Haritayı İlanlara Yaklaştır</button><button class="btn" onclick="refreshMahalleMap()">Haritayı Yenile</button></div><div id="mapStatus" class="muted">Haritayı açmak için butona bas.</div><div id="mahalleMap" class="mapbox"></div><div id="mapListFallback" style="margin-top:12px"></div><div class="card" style="margin-top:12px"><h4>Harita verisi</h4><div class="muted">${allAssets().length} kayıt haritaya yerleştirilmeye çalışılacak. Konumu net olmayan kayıtlar ilçe/mahalle merkezine yakın gösterilebilir.</div></div></div>`;
+  $('mahalle').innerHTML=`<div class="card"><h3>🗺️ Mahalle Takibi</h3><div class="notice">Harita, CRM'e kaydettiğin portföyler ve ilan arşivindeki kayıtları gösterir. Sahibinden'deki tüm ilanları otomatik çekmez. Ekran siyah/boş kalırsa "Haritayı Yenile" butonuna bas.</div><div class="row"><button class="btn primary" onclick="initMahalleMap(true)">Konumuma Göre Haritayı Aç</button><button class="btn" onclick="plotMahalleAssets()">İlanları Haritada Göster</button><button class="btn secondary" onclick="fitMapToAssets()">Haritayı İlanlara Yaklaştır</button><button class="btn" onclick="refreshMahalleMap()">Haritayı Yenile</button></div><div id="mapStatus" class="muted">Haritayı açmak için butona bas.</div><div id="mahalleMap" class="mapbox"></div><div id="mapListFallback" style="margin-top:12px"></div><div class="card" style="margin-top:12px"><h4>Harita verisi</h4><div class="muted">${allAssets().length} kayıt haritaya yerleştirilmeye çalışılacak. Konumu hatalı görünen eski kayıtlar, konum metninden otomatik düzeltilmeye çalışılır. Yeni kayıtlar eklenti V12.10 ile daha doğru gelir.</div></div></div>`;
 }
 function fallbackCenter(){ return [41.390,41.420]; }
 async function ensureLeafletLoaded(){

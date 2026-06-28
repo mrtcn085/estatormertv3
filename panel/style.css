@@ -120,3 +120,5 @@ input[type="file"]{padding:8px;background:#0b1220}
 #mahalleMap .leaflet-container,.leaflet-container{background:#e5e7eb!important;}
 .mapbox .leaflet-control-container{font-size:12px;}
 @media(max-width:800px){#mahalleMap{height:72vh!important;min-height:430px!important;border-radius:14px}.map-popup{min-width:210px}.map-popup img{width:210px!important;height:120px!important}}
+
+.small-url{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
