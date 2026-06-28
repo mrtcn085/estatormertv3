@@ -63,6 +63,37 @@ document.addEventListener('DOMContentLoaded', setupConfigButtons);
 let session = null;
 let currentUser = null;
 let cache = { kisiler: [], portfoyler: [], ilanlar: [], gorevler: [], notlar: [] };
+
+let pendingMobileImport = null;
+function decodePxImportPayload(raw){
+  try{
+    const json = decodeURIComponent(escape(atob(decodeURIComponent(raw))));
+    return JSON.parse(json);
+  }catch(e){
+    try { return JSON.parse(decodeURIComponent(raw)); } catch { return null; }
+  }
+}
+function capturePxImportFromHash(){
+  const h = location.hash || '';
+  const m = h.match(/px-import=([^&]+)/);
+  if(!m) return;
+  const data = decodePxImportPayload(m[1]);
+  if(data && typeof data === 'object'){
+    localStorage.setItem('portfoyx_pending_mobile_import', JSON.stringify(data));
+    pendingMobileImport = data;
+  }
+  history.replaceState(null, '', location.pathname + location.search);
+}
+function getPendingMobileImport(){
+  if(pendingMobileImport) return pendingMobileImport;
+  try { pendingMobileImport = JSON.parse(localStorage.getItem('portfoyx_pending_mobile_import') || 'null'); } catch { pendingMobileImport = null; }
+  return pendingMobileImport;
+}
+function clearPendingMobileImport(){
+  pendingMobileImport = null;
+  localStorage.removeItem('portfoyx_pending_mobile_import');
+}
+capturePxImportFromHash();
 const sections = ['dashboard','arama','mobil','mahalle','kisiler','portfoyler','ilanlar','eslesme','mesajlar','gorevler','ayarlar'];
 const navNames = {dashboard:'📊 Dashboard',arama:'🔎 Müşteri Arama Asistanı',mobil:'📱 Mobil İlan Kaydet',mahalle:'🗺️ Mahalle Takibi',kisiler:'👥 Kişiler',portfoyler:'🏘️ Portföyler',ilanlar:'🗂️ İlan Arşivi',eslesme:'🎯 Eşleştirme',gorevler:'✅ Görevler',mesajlar:'📣 Mesajlar',ayarlar:'⚙️ Ayarlar'};
 
@@ -454,8 +485,98 @@ function extractIlanNoFromUrl(url){
   const m=String(url||'').match(/(?:ilan|classified|\/)(\d{6,})(?:[/?#]|$)/i) || String(url||'').match(/(\d{7,})/);
   return m ? m[1] : '';
 }
+
+function pxSiteOrigin(){
+  return location.origin || (location.protocol + '//' + location.host);
+}
+function mobileBookmarkletCode(){
+  const src = pxSiteOrigin().replace(/\/$/,'') + '/mobile-capture.js';
+  const code = `(function(){var s=document.createElement('script');s.src='${src}?v='+Date.now();s.async=true;document.body.appendChild(s);})();`;
+  return 'javascript:' + encodeURIComponent(code).replace(/%20/g,'');
+}
+function mobileInstallBox(){
+  const bm = mobileBookmarkletCode();
+  return `<div class="card">
+    <h3>⚡ Mobil Otomatik Çek</h3>
+    <div class="notice">
+      Linki PortföyX içine yapıştırınca siteyi dışarıdan okuyamayız. Ama telefonda Sahibinden ilan sayfası açıkken aşağıdaki <b>PortföyX'e Aktar</b> yer imine basarsan, açık sayfadaki görünen başlık/fiyat/konum/telefon/görseller çekilip PortföyX'e aktarılır. Bu, bilgisayardaki Chrome eklentisinin mobil karşılığıdır.
+    </div>
+    <div class="row">
+      <a class="btn primary" href="${bm}" onclick="alert('Bu butonu tarayıcı yer imlerine/favorilere ekle. Sonra Sahibinden ilan sayfasındayken bu favoriye bas. iPhone/Safari: Paylaş → Yer İmi Ekle. Android/Chrome: yıldız/favori ekle veya linki favorilere kaydet.');return false;">⭐ PortföyX'e Aktar Yer İmi</a>
+      <button class="btn secondary" onclick="copyMobileBookmarklet()">Kodu Kopyala</button>
+      <button class="btn" onclick="applyPendingMobileImport()">Aktarılan Veriyi Forma Doldur</button>
+    </div>
+    <div id="mobileImportStatus" class="muted" style="margin-top:8px">${getPendingMobileImport()?'Aktarılmış ilan verisi bekliyor. Butona basıp forma doldurabilirsin.':'Hazır. Önce yer imini ekle, sonra ilan sayfasından aktar.'}</div>
+    <details class="notice" style="margin-top:10px">
+      <summary>Telefonda nasıl kullanılır?</summary>
+      <ol>
+        <li>Bu ekrandaki <b>PortföyX'e Aktar Yer İmi</b> butonunu favorilere/yer imlerine ekle.</li>
+        <li>Sahibinden uygulaması yerine mümkünse tarayıcıda ilan sayfasını aç.</li>
+        <li>İlanda telefon gizliyse önce telefonu göster.</li>
+        <li>Favorilerden <b>PortföyX'e Aktar</b> yer imine bas.</li>
+        <li>PortföyX açılır, veriler forma dolar; kontrol edip kaydet.</li>
+      </ol>
+    </details>
+  </div>`;
+}
+window.copyMobileBookmarklet=async()=>{
+  try{
+    await navigator.clipboard.writeText(mobileBookmarkletCode());
+    alert('Yer imi kodu kopyalandı. Favori URL alanına yapıştırabilirsin.');
+  }catch(e){
+    prompt('Bu kodu kopyala ve favori URL alanına yapıştır:', mobileBookmarkletCode());
+  }
+};
+function setValIf(id,v){
+  const el=$(id); if(!el || v===undefined || v===null || v==='') return;
+  el.value = String(v);
+  try { el.dispatchEvent(new Event('change')); el.dispatchEvent(new Event('input')); } catch {}
+}
+function selectBest(id,v){
+  const el=$(id); if(!el || !v) return;
+  const nv = norm(v);
+  const opts=[...el.options];
+  const exact=opts.find(o=>norm(o.value)===nv || norm(o.textContent)===nv);
+  const loose=opts.find(o=>nv.includes(norm(o.value)) || nv.includes(norm(o.textContent)) || norm(o.value).includes(nv));
+  el.value=(exact||loose||opts[0]).value;
+  try { el.dispatchEvent(new Event('change')); } catch {}
+}
+function fillMobilFormFromImport(d){
+  if(!d) return;
+  window.__pxImportedListing = d;
+  setValIf('mobil_url', d.url);
+  setValIf('mobil_ilan_no', d.ilan_no);
+  setValIf('mobil_baslik', d.baslik);
+  setValIf('mobil_fiyat', d.fiyat || d.fiyat_text);
+  try{ const el=$('mobil_fiyat'); if(el) formatMoneyInput(el); }catch{}
+  selectBest('mobil_tur', d.tur || d.kategori || d.emlak_tipi);
+  selectBest('mobil_islem_tipi', d.islem_tipi || d.islem || d.baslik);
+  setValIf('mobil_sehir', d.sehir);
+  setValIf('mobil_ilce', d.ilce);
+  setValIf('mobil_mahalle', d.mahalle);
+  selectBest('mobil_oda', d.oda);
+  if(d.oda && $('mobil_oda') && $('mobil_oda').value==='Diğer') setValIf('mobil_oda_diger', d.oda);
+  setValIf('mobil_brut_m2', d.brut_m2 || d.m2_brut || d.m2);
+  setValIf('mobil_net_m2', d.net_m2 || d.m2_net);
+  setValIf('mobil_ad_soyad', d.ad_soyad || d.isim || d.satici);
+  setValIf('mobil_telefon', d.telefon);
+  setValIf('mobil_aciklama', d.aciklama);
+  if(Array.isArray(d.foto_urls)) setValIf('mobil_foto_urls', d.foto_urls.join(', '));
+  const st=$('mobileImportStatus') || $('mobilSaveStatus');
+  if(st) st.textContent = 'İlan verileri forma dolduruldu. Kontrol edip kaydedebilirsin.';
+}
+window.applyPendingMobileImport=()=>{
+  const d=getPendingMobileImport();
+  if(!d) return alert('Aktarılmış ilan verisi bulunamadı. Önce Sahibinden ilan sayfasındayken PortföyX’e Aktar yer imine bas.');
+  fillMobilFormFromImport(d);
+};
+function autoApplyPendingImportIfAny(){
+  const d=getPendingMobileImport();
+  if(d){ setTimeout(()=>fillMobilFormFromImport(d), 80); }
+}
+
 function mobileListingForm(){
-  return `<div class="card"><h3>📱 Mobil İlan Kaydet</h3><div class="notice">Telefon/tablette Sahibinden ilanını açıp <b>Paylaş → Linki Kopyala</b> yap. Linki buraya yapıştır, hızlı bilgileri doldur ve ilan arşivine kaydet. Bu ekran siteyi otomatik taramaz; senin verdiğin bilgileri PortföyX arşivine alır.</div>
+  return `${mobileInstallBox()}<div class="card"><h3>📱 Mobil İlan Kaydet / Kontrol Et</h3><div class="notice">Mobil otomatik çek ile gelen bilgiler burada dolar. Gerekirse düzeltip kaydet. Linki sadece yapıştırırsan tüm veriler otomatik okunmaz; otomatik çek için ilan sayfasında <b>PortföyX'e Aktar</b> yer imine bas.</div>
   <div class="form-section"><h4>İlan Linki</h4><div class="field"><label>Sahibinden İlan Linki</label><input id="mobil_url" placeholder="https://www.sahibinden.com/ilan/..." oninput="guessMobileTitle()"></div><div class="row"><div class="field"><label>İlan No</label><input id="mobil_ilan_no" placeholder="Boş bırakırsan linkten bulunur"></div><div class="field"><label>Başlık</label><input id="mobil_baslik" placeholder="Örn: Arhavi 3+1 Kiralık Daire"></div></div></div>
   <div class="form-section"><h4>Temel Bilgiler</h4><div class="row"><div class="field"><label>Tür</label><select id="mobil_tur"><option>Konut</option><option>İş Yeri</option><option>Arsa</option><option>Bina</option><option>Turistik Tesis</option><option>Devre Mülk</option><option>Konut Projesi</option></select></div><div class="field"><label>İşlem</label><select id="mobil_islem_tipi"><option>Kiralık</option><option>Satılık</option><option>Devren Kiralık</option><option>Devren Satılık</option><option>Kat Karşılığı Satılık</option></select></div>${moneyField('mobil_fiyat','Fiyat')}</div>${locationFields('mobil')}<div class="row">${odaField('mobil',ODA_KONUT)}<div class="field"><label>Brüt m²</label><input id="mobil_brut_m2" inputmode="numeric"></div><div class="field"><label>Net m²</label><input id="mobil_net_m2" inputmode="numeric"></div></div></div>
   <div class="form-section"><h4>İlan Sahibi / İletişim</h4><div class="row"><div class="field"><label>İsim Soyisim</label><input id="mobil_ad_soyad"></div>${phoneField('mobil_telefon','Telefon')}</div><div class="field"><label>Not / Açıklama</label><textarea id="mobil_aciklama" placeholder="Telefonda konuştuğun notları veya ilan açıklamasını yazabilirsin"></textarea></div></div>
@@ -464,6 +585,7 @@ function mobileListingForm(){
 }
 function renderMobilIlanKaydet(){
   $('mobil').innerHTML = `${mobileListingForm()}<div class="card"><h3>Son kaydedilen ilanlar</h3>${renderAssetCards(cache.ilanlar.slice(0,8).map(a=>({a,score:100,reasons:['ilan arşivi']})))}</div>`;
+  autoApplyPendingImportIfAny();
 }
 window.clearMobilIlanForm=()=>{
   ['mobil_url','mobil_ilan_no','mobil_baslik','mobil_fiyat','mobil_sehir','mobil_ilce','mobil_mahalle','mobil_oda','mobil_oda_diger','mobil_brut_m2','mobil_net_m2','mobil_ad_soyad','mobil_telefon','mobil_aciklama','mobil_foto_urls'].forEach(id=>{const el=$(id); if(el) el.value='';});
@@ -482,9 +604,12 @@ window.saveMobilIlan=async()=>{
     const uploaded=await uploadFiles('mobil_gorseller',`mobil-ilanlar/${ilan_no}`,3);
     const urlPhotos=val('mobil_foto_urls').split(',').map(x=>x.trim()).filter(Boolean);
     const foto_urls=[...uploaded.map(x=>x.url).filter(Boolean), ...urlPhotos].slice(0,8);
-    const detaylar={kaynak:'mobil_ilan_kaydet',dosyalar:{gorseller:uploaded},mobil_kayit_tarihi:new Date().toISOString()};
+    const imported=window.__pxImportedListing || getPendingMobileImport() || {};
+    const detaylar={kaynak: imported?.url?'mobil_otomatik_aktar':'mobil_ilan_kaydet',dosyalar:{gorseller:uploaded},mobil_kayit_tarihi:new Date().toISOString(),imported_from:imported?.url||'',map_lat:imported?.map_lat||imported?.lat||null,map_lng:imported?.map_lng||imported?.lng||null,map_source:imported?.map_source||'mobile_import'};
     const obj={ilan_no,url,baslik:val('mobil_baslik')||[val('mobil_sehir'),val('mobil_ilce'),val('mobil_mahalle'),val('mobil_oda'),val('mobil_islem_tipi'),val('mobil_tur')].filter(Boolean).join(' '),tur:val('mobil_tur'),islem_tipi:val('mobil_islem_tipi'),fiyat:valNum('mobil_fiyat'),sehir:val('mobil_sehir'),ilce:val('mobil_ilce'),mahalle:val('mobil_mahalle'),konum:[val('mobil_sehir'),val('mobil_ilce'),val('mobil_mahalle')].filter(Boolean).join(' / '),oda,brut_m2:valNum('mobil_brut_m2'),net_m2:valNum('mobil_net_m2'),ad_soyad:val('mobil_ad_soyad'),telefon,aciklama:val('mobil_aciklama'),kimden:'Mobil kayıt',foto_urls,detaylar};
     await upsert('ilan_arsivi',obj);
+    clearPendingMobileImport();
+    window.__pxImportedListing=null;
     if(st) st.textContent='Kaydedildi. İlan arşivi, eşleştirme ve mahalle takibine dahil edildi.';
     clearMobilIlanForm();
     showSec('ilanlar');
