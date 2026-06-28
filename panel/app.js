@@ -80,8 +80,7 @@ function waTextLink(phone,text){ const u=waLink(phone); return u ? `${u}?text=${
 function callLink(phone){ const d=normalizePhoneForSave(phone); return d ? `tel:${d}` : ''; }
 function callHtml(phone){ const u=callLink(phone); return u ? `<a class="call" href="${u}">📞 Direkt Ara</a>` : '-'; }
 function contactActions(phone){ return `<div class="actions-stack">${waHtml(phone)}${callHtml(phone)}</div>`; }
-function jsStr(s){ return String(s||'').replace(/\/g,'\\').replace(/'/g,"\'").replace(/
-/g,' '); }
+function jsStr(s){ return String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\r?\n/g,' '); }
 function obj(v){ try{return typeof v==='string'?JSON.parse(v||'{}'):(v||{});}catch{return {}} }
 function fileMeta(portfoy,key){ const d=obj(portfoy.detaylar); return d?.dosyalar?.[key] || null; }
 function photoMetas(portfoy){ const d=obj(portfoy.detaylar); const arr=Array.isArray(d?.dosyalar?.gorseller)?d.dosyalar.gorseller:[]; if(arr.length) return arr; return parseArr(portfoy.foto_urls).map((url,i)=>({url,path:'',name:`Görsel ${i+1}`})); }
