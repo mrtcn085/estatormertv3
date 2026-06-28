@@ -330,11 +330,33 @@ window.saveSearchAsCustomer=async()=>{
 };
 
 let mahalleMap=null, mahalleLayer=null;
+let mahalleMapRendered=false;
 function renderMahalleTakibi(){
-  $('mahalle').innerHTML=`<div class="card"><h3>🗺️ Mahalle Takibi</h3><div class="notice">Harita, CRM'e kaydettiğin portföyler ve ilan arşivindeki kayıtları gösterir. Sahibinden'deki tüm ilanları otomatik çekmez.</div><div class="row"><button class="btn primary" onclick="initMahalleMap()">Konumuma Göre Haritayı Aç</button><button class="btn" onclick="plotMahalleAssets()">İlanları Haritada Göster</button><button class="btn secondary" onclick="fitMapToAssets()">Haritayı İlanlara Yaklaştır</button></div><div id="mapStatus" class="muted">Haritayı açmak için butona bas.</div><div id="mahalleMap" class="mapbox"></div><div class="card" style="margin-top:12px"><h4>Harita verisi</h4><div class="muted">${allAssets().length} kayıt haritaya yerleştirilmeye çalışılacak. Konumu net olmayan kayıtlar ilçe/mahalle merkezine yakın gösterilebilir.</div></div></div>`;
-  setTimeout(()=>initMahalleMap(false),50);
+  // Harita daha önce gizli sekmede oluşturulduysa siyah/boş kalabiliyordu.
+  // Bölüm yeniden çizilirken eski Leaflet nesnesini temizleyip kullanıcı butonuyla kuruyoruz.
+  try{ if(mahalleMap && mahalleMap.remove) mahalleMap.remove(); }catch(e){}
+  mahalleMap=null; mahalleLayer=null; mahalleMapRendered=false;
+  $('mahalle').innerHTML=`<div class="card"><h3>🗺️ Mahalle Takibi</h3><div class="notice">Harita, CRM'e kaydettiğin portföyler ve ilan arşivindeki kayıtları gösterir. Sahibinden'deki tüm ilanları otomatik çekmez. Ekran siyah/boş kalırsa "Haritayı Yenile" butonuna bas.</div><div class="row"><button class="btn primary" onclick="initMahalleMap(true)">Konumuma Göre Haritayı Aç</button><button class="btn" onclick="plotMahalleAssets()">İlanları Haritada Göster</button><button class="btn secondary" onclick="fitMapToAssets()">Haritayı İlanlara Yaklaştır</button><button class="btn" onclick="refreshMahalleMap()">Haritayı Yenile</button></div><div id="mapStatus" class="muted">Haritayı açmak için butona bas.</div><div id="mahalleMap" class="mapbox"></div><div id="mapListFallback" style="margin-top:12px"></div><div class="card" style="margin-top:12px"><h4>Harita verisi</h4><div class="muted">${allAssets().length} kayıt haritaya yerleştirilmeye çalışılacak. Konumu net olmayan kayıtlar ilçe/mahalle merkezine yakın gösterilebilir.</div></div></div>`;
 }
 function fallbackCenter(){ return [41.390,41.420]; }
+async function ensureLeafletLoaded(){
+  if(window.L) return true;
+  const status=$('mapStatus'); if(status) status.textContent='Harita kütüphanesi yükleniyor...';
+  try{
+    if(!document.querySelector('link[data-leaflet-fallback]')){
+      const css=document.createElement('link'); css.rel='stylesheet'; css.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css'; css.setAttribute('data-leaflet-fallback','1'); document.head.appendChild(css);
+    }
+    await new Promise((resolve,reject)=>{
+      const sc=document.createElement('script'); sc.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js'; sc.async=true; sc.onload=resolve; sc.onerror=reject; document.head.appendChild(sc);
+      setTimeout(()=>window.L?resolve():reject(new Error('Leaflet yüklenemedi')),9000);
+    });
+  }catch(e){
+    if(status) status.textContent='Harita kütüphanesi yüklenemedi. İnternet bağlantısını kontrol et veya sayfayı yenile.';
+    renderMapListFallback();
+    return false;
+  }
+  return !!window.L;
+}
 function locKey(a){ return [a.sehir,a.ilce,a.mahalle].filter(Boolean).join(' / ') || 'Artvin Hopa'; }
 function localCoordFor(a){
   const key=norm(locKey(a));
@@ -357,25 +379,60 @@ async function geocodeAsset(a){
   }catch(e){}
   return fallbackCenter();
 }
-window.initMahalleMap=(ask=true)=>{
-  if(!window.L){ $('mapStatus').textContent='Harita kütüphanesi yüklenemedi. Sayfayı yenile.'; return; }
-  if(mahalleMap){ mahalleMap.invalidateSize(); return; }
-  mahalleMap=L.map('mahalleMap').setView(fallbackCenter(),13);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19, attribution:'© OpenStreetMap'}).addTo(mahalleMap);
-  mahalleLayer=L.layerGroup().addTo(mahalleMap);
-  if(ask && navigator.geolocation){
-    navigator.geolocation.getCurrentPosition(pos=>{ const p=[pos.coords.latitude,pos.coords.longitude]; mahalleMap.setView(p,14); L.circleMarker(p,{radius:8}).addTo(mahalleMap).bindPopup('Şu anki konumun'); plotMahalleAssets(); },()=>plotMahalleAssets(),{enableHighAccuracy:true,timeout:7000});
-  } else plotMahalleAssets();
+window.initMahalleMap=async(ask=true)=>{
+  const status=$('mapStatus');
+  const box=$('mahalleMap');
+  if(!box){ return; }
+  box.style.display='block';
+  box.style.minHeight = window.innerWidth < 800 ? '70vh' : '520px';
+  box.innerHTML='';
+  if(!(await ensureLeafletLoaded())) return;
+  if(mahalleMap){ try{ mahalleMap.invalidateSize(true); }catch(e){} return; }
+  try{
+    mahalleMap=L.map('mahalleMap',{zoomControl:true,preferCanvas:true}).setView(fallbackCenter(),13);
+    const tiles=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19, attribution:'© OpenStreetMap'});
+    tiles.on('tileerror',()=>{ if(status) status.textContent='Harita karoları yüklenemedi. Bağlantı yavaşsa birkaç saniye bekle veya Haritayı Yenile de.'; });
+    tiles.addTo(mahalleMap);
+    mahalleLayer=L.layerGroup().addTo(mahalleMap);
+    mahalleMapRendered=true;
+    setTimeout(()=>{ try{ mahalleMap.invalidateSize(true); }catch(e){} },250);
+    setTimeout(()=>{ try{ mahalleMap.invalidateSize(true); }catch(e){} },900);
+    if(status) status.textContent='Harita hazır. İlanlar yerleştiriliyor...';
+    if(ask && navigator.geolocation){
+      navigator.geolocation.getCurrentPosition(pos=>{ const p=[pos.coords.latitude,pos.coords.longitude]; mahalleMap.setView(p,14); L.circleMarker(p,{radius:8}).addTo(mahalleMap).bindPopup('Şu anki konumun'); plotMahalleAssets(); },()=>plotMahalleAssets(),{enableHighAccuracy:true,timeout:7000});
+    } else plotMahalleAssets();
+  }catch(e){
+    if(status) status.textContent='Harita başlatılamadı: '+(e.message||e);
+    renderMapListFallback();
+  }
+};
+window.refreshMahalleMap=()=>{
+  try{ if(mahalleMap && mahalleMap.remove) mahalleMap.remove(); }catch(e){}
+  mahalleMap=null; mahalleLayer=null;
+  initMahalleMap(false);
 };
 function markerPopup(a){ const p=assetPhoto(a); const phone=assetPhone(a); const foto=p?`<img src="${esc(p)}" style="width:170px;height:95px;object-fit:cover;border-radius:10px;margin-bottom:6px">`:''; return `<div class="map-popup">${foto}<b>${esc(assetTitle(a))}</b><br><span>${esc([a.islem_tipi,a.tur,a.sehir,a.ilce,a.mahalle].filter(Boolean).join(' / '))}</span><br><b>${money(estatePrice(a))}</b><br>${a.url?`<a target="_blank" href="${esc(a.url)}">İlana git</a><br>`:''}${phone?`${waHtml(phone)} ${callHtml(phone)}`:''}</div>`; }
+function renderMapListFallback(){
+  const el=$('mapListFallback'); if(!el) return;
+  const rows=allAssets().filter(a=>a.sehir||a.ilce||a.mahalle).slice(0,30);
+  el.innerHTML = `<div class="card"><h4>Harita açılamazsa liste görünümü</h4>${renderAssetCards(rows)}</div>`;
+}
 window.plotMahalleAssets=async()=>{
-  if(!mahalleMap) initMahalleMap(false);
-  if(!mahalleLayer) return;
+  if(!mahalleMap){ await initMahalleMap(false); }
+  if(!mahalleLayer){ renderMapListFallback(); return; }
   mahalleLayer.clearLayers();
   const assets=allAssets().filter(a=>a.sehir||a.ilce||a.mahalle);
-  $('mapStatus').textContent=`${assets.length} kayıt haritaya yerleştiriliyor...`;
-  for(const a of assets){ const pos=await geocodeAsset(a); const off=(Math.random()-0.5)*0.002; L.marker([pos[0]+off,pos[1]+off]).addTo(mahalleLayer).bindPopup(markerPopup(a)); }
-  $('mapStatus').textContent=`${assets.length} kayıt haritada gösterildi.`;
+  const status=$('mapStatus');
+  if(status) status.textContent=`${assets.length} kayıt haritaya yerleştiriliyor...`;
+  for(const a of assets){
+    const pos=await geocodeAsset(a);
+    const seed=Math.abs(String(a.id||a.baslik||'').split('').reduce((t,ch)=>t+ch.charCodeAt(0),0));
+    const offLat=((seed%7)-3)*0.00035, offLng=(((seed/7)|0)%7-3)*0.00035;
+    L.marker([pos[0]+offLat,pos[1]+offLng]).addTo(mahalleLayer).bindPopup(markerPopup(a));
+  }
+  if(status) status.textContent=`${assets.length} kayıt haritada gösterildi.`;
+  try{ mahalleMap.invalidateSize(true); }catch(e){}
+  if(assets.length) fitMapToAssets();
 };
 window.fitMapToAssets=()=>{ if(!mahalleLayer || !mahalleMap) return; const layers=mahalleLayer.getLayers(); if(!layers.length) return; mahalleMap.fitBounds(L.featureGroup(layers).getBounds().pad(.25)); };
 

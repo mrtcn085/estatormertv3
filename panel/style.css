@@ -113,3 +113,10 @@ input[type="file"]{padding:8px;background:#0b1220}
 /* V12.8 - Müşteri Arama Asistanı + Mahalle Takibi */
 .cards-list{display:flex;flex-direction:column;gap:12px}.result-card{display:grid;grid-template-columns:130px 1fr auto;gap:12px;align-items:center;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:14px;padding:12px}.result-img{width:130px;height:90px;object-fit:cover;border-radius:12px;background:#111}.mapbox{height:68vh;min-height:460px;border-radius:18px;border:1px solid rgba(255,255,255,.12);overflow:hidden;background:#111;margin-top:12px}.map-popup{color:#111;min-width:190px}.map-popup a.wa,.map-popup a.call{display:inline-block;margin-top:5px;text-decoration:none;padding:6px 8px;border-radius:8px;background:#10b981;color:white}.map-popup a.call{background:#3b82f6}.leaflet-popup-content-wrapper{border-radius:14px}.leaflet-container{font-family:inherit}.section#mahalle .notice,.section#arama .notice{line-height:1.45}
 @media(max-width:800px){.result-card{grid-template-columns:1fr}.result-img{width:100%;height:180px}.mapbox{height:70vh;min-height:420px}.layout{grid-template-columns:1fr}nav{position:sticky;top:0;z-index:10;display:flex;overflow:auto;gap:8px;padding-bottom:8px}nav button{min-width:max-content}.row{grid-template-columns:1fr!important;display:grid!important}.two,.grid{grid-template-columns:1fr!important}.table-wrap{overflow:auto}.btn,.segbtn,a.wa,a.call{min-height:42px;font-size:15px}}
+
+/* V12.9 - Mahalle Takibi harita siyah ekran fix */
+#mahalleMap{position:relative;z-index:1;background:#e5e7eb!important;}
+#mahalleMap .leaflet-tile-pane{opacity:1!important;}
+#mahalleMap .leaflet-container,.leaflet-container{background:#e5e7eb!important;}
+.mapbox .leaflet-control-container{font-size:12px;}
+@media(max-width:800px){#mahalleMap{height:72vh!important;min-height:430px!important;border-radius:14px}.map-popup{min-width:210px}.map-popup img{width:210px!important;height:120px!important}}
