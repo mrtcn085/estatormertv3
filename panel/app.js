@@ -277,13 +277,13 @@ window.savePortfoy=async()=>{
   await upsert('portfoyler',o);
 };
 function fileLinks(p){ return portfolioFileLinks(p); }
-function tablePortfoy(){ return `<div class="table-wrap"><table class="table"><thead><tr><th>Görsel</th><th>Portföy</th><th>Fiyat</th><th>Satıcı</th><th>Dosyalar</th><th></th></tr></thead><tbody>${cache.portfoyler.map(p=>{const c=commission(p);return `<tr><td>${photoThumbHtml(p)}</td><td><b>${esc(p.baslik)}</b><br><span class="muted">${esc([p.tur,p.alt_tur,p.islem_tipi,p.sehir,p.ilce,p.mahalle,p.oda].filter(Boolean).join(' / '))}</span><br><span class="muted">${p.kiracili?'Kiracılı: Evet':''} ${parseArr(p.imar_durumlari).length?'İmar: '+parseArr(p.imar_durumlari).join(', '):''}</span></td><td>${money(p.fiyat)}<br>${compHtml(p)}<br><span class="muted">${esc(c.text)}</span></td><td>${esc(p.satici_ad_soyad||'-')}<br>${esc(formatTRPhone(p.satici_telefon)||'')}<br><span class="muted">TC: ${esc(p.satici_tc||'-')}</span><br>${contactActions(p.satici_telefon)}</td><td>${fileLinks(p)}</td><td><button class="btn small" onclick="goMatchAsset('${p.id}','portfoy')">Alıcı bul</button> <button class="btn small danger" onclick="del('portfoyler','${p.id}')">Sil</button></td></tr>`}).join('')}</tbody></table></div>` }
+function tablePortfoy(){ return `<div class="table-wrap"><table class="table"><thead><tr><th>Görsel</th><th>Portföy</th><th>Fiyat</th><th>Satıcı</th><th>Dosyalar</th><th></th></tr></thead><tbody>${cache.portfoyler.map(p=>{const c=commission(p);return `<tr><td>${photoThumbHtml(p)}</td><td><b>${esc(p.baslik)}</b><br><span class="muted">${esc([p.tur,p.alt_tur,p.islem_tipi,p.sehir,p.ilce,p.mahalle,p.oda].filter(Boolean).join(' / '))}</span><br><span class="muted">${p.kiracili?'Kiracılı: Evet':''} ${parseArr(p.imar_durumlari).length?'İmar: '+parseArr(p.imar_durumlari).join(', '):''}</span></td><td>${money(p.fiyat)}<br>${compHtml(p)}<br><span class="muted">${esc(c.text)}</span></td><td>${esc(p.satici_ad_soyad||'-')}<br>${esc(formatTRPhone(p.satici_telefon)||'')}<br><span class="muted">TC: ${esc(p.satici_tc||'-')}</span><br>${contactActions(p.satici_telefon)}</td><td>${fileLinks(p)}</td><td><button class="btn small" onclick="goMatchAsset('${p.id}','portfoy')">Alıcı bul</button> <button class="btn small secondary" onclick="fixAssetLocation('portfoy','${p.id}')">Konum Düzelt</button> <button class="btn small danger" onclick="del('portfoyler','${p.id}')">Sil</button></td></tr>`}).join('')}</tbody></table></div>` }
 
 
 function renderIlanlar(){ $('ilanlar').innerHTML=`<div class="card"><h3>İlan Arşivi</h3><p class="muted">Sahibinden eklentisi cloud ayarı yapıldıktan sonra buraya otomatik düşer. Şimdilik manuel kayıt da ekleyebilirsin.</p>${manualIlanForm()}${tableIlanlar()}</div>`; }
 function manualIlanForm(){return `<details><summary><b>Manuel İlan Ekle</b></summary><div class="row"><div class="field"><label>İlan No</label><input id="ilan_ilan_no"></div><div class="field"><label>URL</label><input id="ilan_url"></div><div class="field"><label>Başlık</label><input id="ilan_baslik"></div><div class="field"><label>Tür</label><select id="ilan_tur">${selectOptions(PORTFOY_TURLER)}</select></div><div class="field"><label>İşlem</label>${buttonGroup('ilan','islem_tipi',['Satılık','Kiralık'],'Satılık')}</div>${moneyField('ilan_fiyat','Fiyat')}${locationFields('ilan')}${odaField('ilan',ODA_KONUT)}<div class="field"><label>Brüt m²</label><input id="ilan_brut_m2"></div><div class="field"><label>Net m²</label><input id="ilan_net_m2"></div><div class="field"><label>İsim</label><input id="ilan_ad_soyad"></div>${phoneField('ilan_telefon')}<div class="field"><label>Foto URL, virgülle</label><input id="ilan_foto_urls"></div><button class="btn" onclick="saveIlan()">İlan Kaydet</button></div></details><hr>`}
 window.saveIlan=()=>{ const oda=val('ilan_oda')==='Diğer'?val('ilan_oda_diger'):val('ilan_oda'); const photos=val('ilan_foto_urls').split(',').map(x=>x.trim()).filter(Boolean); const o={ilan_no:val('ilan_ilan_no'),url:val('ilan_url'),baslik:val('ilan_baslik'),tur:val('ilan_tur'),islem_tipi:val('ilan_islem_tipi'),fiyat:valNum('ilan_fiyat'),sehir:val('ilan_sehir'),ilce:val('ilan_ilce'),mahalle:val('ilan_mahalle'),oda,brut_m2:valNum('ilan_brut_m2'),net_m2:valNum('ilan_net_m2'),ad_soyad:val('ilan_ad_soyad'),telefon:normalizePhoneForSave(val('ilan_telefon')),foto_urls:photos}; upsert('ilan_arsivi',o); };
-function tableIlanlar(){ return `<div class="table-wrap"><table class="table"><thead><tr><th>Görsel</th><th>İlan</th><th>Fiyat</th><th>Kişi</th><th></th></tr></thead><tbody>${cache.ilanlar.map(i=>{const photo=parseFirstPhoto(i.foto_urls);const c=commission(i);return `<tr><td>${photo?`<button class="imgbtn" onclick="openStoredFile('','${jsStr(photo)}')"><img class="thumb" src="${esc(photo)}"></button>`:'-'}</td><td><b>${esc(i.baslik||i.ilan_no||'-')}</b><br><span class="muted">${esc([i.tur,i.islem_tipi,i.sehir,i.ilce,i.mahalle,i.oda].filter(Boolean).join(' / '))}</span><br>${i.url?`<a target="_blank" class="muted" href="${esc(i.url)}">İlana git</a>`:''}</td><td>${money(estatePrice(i))}<br>${compHtml(i)}<br><span class="muted">${esc(c.text)}</span></td><td>${esc(i.ad_soyad||'-')}<br>${esc(formatTRPhone(i.telefon)||'')}<br>${contactActions(i.telefon)}</td><td><button class="btn small" onclick="goMatchAsset('${i.id}','ilan')">Alıcı bul</button> <button class="btn small danger" onclick="del('ilan_arsivi','${i.id}')">Sil</button></td></tr>`}).join('')}</tbody></table></div>` }
+function tableIlanlar(){ return `<div class="table-wrap"><table class="table"><thead><tr><th>Görsel</th><th>İlan</th><th>Fiyat</th><th>Kişi</th><th></th></tr></thead><tbody>${cache.ilanlar.map(i=>{const photo=parseFirstPhoto(i.foto_urls);const c=commission(i);return `<tr><td>${photo?`<button class="imgbtn" onclick="openStoredFile('','${jsStr(photo)}')"><img class="thumb" src="${esc(photo)}"></button>`:'-'}</td><td><b>${esc(i.baslik||i.ilan_no||'-')}</b><br><span class="muted">${esc([i.tur,i.islem_tipi,i.sehir,i.ilce,i.mahalle,i.oda].filter(Boolean).join(' / '))}</span><br>${i.url?`<a target="_blank" class="muted" href="${esc(i.url)}">İlana git</a>`:''}</td><td>${money(estatePrice(i))}<br>${compHtml(i)}<br><span class="muted">${esc(c.text)}</span></td><td>${esc(i.ad_soyad||'-')}<br>${esc(formatTRPhone(i.telefon)||'')}<br>${contactActions(i.telefon)}</td><td><button class="btn small" onclick="goMatchAsset('${i.id}','ilan')">Alıcı bul</button> <button class="btn small secondary" onclick="fixAssetLocation('ilan','${i.id}')">Konum Düzelt</button> <button class="btn small danger" onclick="del('ilan_arsivi','${i.id}')">Sil</button></td></tr>`}).join('')}</tbody></table></div>` }
 
 
 window.goMatchAsset=(id,type)=>{ showSec('eslesme'); setTimeout(()=>{ $('matchAsset').value=type+':'+id; runAssetMatch(); },50); };
@@ -444,7 +444,7 @@ function renderMahalleTakibi(){
   // Bölüm yeniden çizilirken eski Leaflet nesnesini temizleyip kullanıcı butonuyla kuruyoruz.
   try{ if(mahalleMap && mahalleMap.remove) mahalleMap.remove(); }catch(e){}
   mahalleMap=null; mahalleLayer=null; mahalleMapRendered=false;
-  $('mahalle').innerHTML=`<div class="card"><h3>🗺️ Mahalle Takibi</h3><div class="notice">Harita, CRM'e kaydettiğin portföyler ve ilan arşivindeki kayıtları gösterir. Sahibinden'deki tüm ilanları otomatik çekmez. Ekran siyah/boş kalırsa "Haritayı Yenile" butonuna bas.</div><div class="row"><button class="btn primary" onclick="initMahalleMap(true)">Konumuma Göre Haritayı Aç</button><button class="btn" onclick="plotMahalleAssets()">İlanları Haritada Göster</button><button class="btn secondary" onclick="fitMapToAssets()">Haritayı İlanlara Yaklaştır</button><button class="btn" onclick="refreshMahalleMap()">Haritayı Yenile</button></div><div id="mapStatus" class="muted">Haritayı açmak için butona bas.</div><div id="mahalleMap" class="mapbox"></div><div id="mapListFallback" style="margin-top:12px"></div><div class="card" style="margin-top:12px"><h4>Harita verisi</h4><div class="muted">${allAssets().length} kayıt haritaya yerleştirilmeye çalışılacak. Konumu hatalı görünen eski kayıtlar, konum metninden otomatik düzeltilmeye çalışılır. Yeni kayıtlar eklenti V12.10 ile daha doğru gelir.</div></div></div>`;
+  $('mahalle').innerHTML=`<div class="card"><h3>🗺️ Mahalle Takibi</h3><div class="notice">Harita, CRM'e kaydettiğin portföyler ve ilan arşivindeki kayıtları gösterir. Sahibinden'den çoğu ilanda net koordinat gelmez; mahalle/ilçe merkezine yaklaşık yerleştirir. Hatalı nokta görürsen karttaki "Konum Düzelt" ile Google Maps linki/enlem-boylam kaydet.</div><div class="row"><button class="btn primary" onclick="initMahalleMap(true)">Konumuma Göre Haritayı Aç</button><button class="btn" onclick="plotMahalleAssets()">İlanları Haritada Göster</button><button class="btn secondary" onclick="fitMapToAssets()">Haritayı İlanlara Yaklaştır</button><button class="btn" onclick="refreshMahalleMap()">Haritayı Yenile</button></div><div id="mapStatus" class="muted">Haritayı açmak için butona bas.</div><div id="mahalleMap" class="mapbox"></div><div id="mapListFallback" style="margin-top:12px"></div><div class="card" style="margin-top:12px"><h4>Harita verisi</h4><div class="muted">${allAssets().length} kayıt haritaya yerleştirilmeye çalışılacak. Konumu hatalı görünen eski kayıtlar, konum metninden otomatik düzeltilmeye çalışılır. Yeni kayıtlar eklenti V12.10 ile daha doğru gelir.</div></div></div>`;
 }
 function fallbackCenter(){ return [41.390,41.420]; }
 async function ensureLeafletLoaded(){
@@ -466,27 +466,74 @@ async function ensureLeafletLoaded(){
   return !!window.L;
 }
 function locKey(a){ return [a.sehir,a.ilce,a.mahalle].filter(Boolean).join(' / ') || 'Artvin Hopa'; }
+function assetDetails(a){ return obj(a?.detaylar); }
+function assetManualCoord(a){
+  const d=assetDetails(a);
+  const lat=Number(a?.lat ?? d.map_lat ?? d.lat ?? d.latitude);
+  const lng=Number(a?.lng ?? d.map_lng ?? d.lng ?? d.longitude);
+  if(Number.isFinite(lat)&&Number.isFinite(lng)&&Math.abs(lat)<=90&&Math.abs(lng)<=180) return [lat,lng];
+  return null;
+}
+function coordAccuracyText(a){ return assetManualCoord(a)?'Net/manuel konum':'Yaklaşık mahalle/ilçe konumu'; }
 function localCoordFor(a){
   const key=norm(locKey(a));
   const known=[
-    [/hopa.*sundura/,[41.399,41.424]],[/hopa.*ortahopa/,[41.390,41.418]],[/hopa/,[41.390,41.418]],
-    [/arhavi/,[41.351,41.304]],[/kemalpasa/,[41.486,41.528]],[/artvin/,[41.182,41.819]],
+    [/hopa.*sundura/,[41.3986,41.4256]],[/hopa.*ortahopa/,[41.3900,41.4185]],[/hopa.*kuledibi/,[41.3946,41.4148]],[/hopa.*bucak/,[41.3855,41.4140]],[/hopa.*cumhuriyet/,[41.3920,41.4210]],
+    [/arhavi.*musazade/,[41.3514,41.3060]],[/arhavi.*bogazici|arhavi.*boğazici|arhavi.*boğaziçi/,[41.3528,41.3018]],[/arhavi.*kavak/,[41.3489,41.3079]],[/arhavi.*hacilar|arhavi.*hacılar/,[41.3450,41.3090]],
+    [/hopa/,[41.390,41.418]],[/arhavi/,[41.351,41.304]],[/kemalpasa|kemalpaşa/,[41.486,41.528]],[/artvin/,[41.182,41.819]],
     [/rize/,[41.025,40.517]],[/trabzon/,[41.005,39.730]]
   ];
   const f=known.find(([re])=>re.test(key)); return f?f[1]:null;
 }
-async function geocodeAsset(a){
-  const key='geo_'+norm(locKey(a));
-  try{ const cached=JSON.parse(localStorage.getItem(key)||'null'); if(cached) return cached; }catch{}
-  const local=localCoordFor(a); if(local){ localStorage.setItem(key,JSON.stringify(local)); return local; }
+async function nominatimCoord(a){
   try{
     const q=[a.mahalle,a.ilce,a.sehir,'Türkiye'].filter(Boolean).join(', ');
-    const res=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q='+encodeURIComponent(q));
+    if(!q.trim()) return null;
+    const res=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=tr&q='+encodeURIComponent(q));
     const data=await res.json();
-    if(data && data[0]){ const pos=[Number(data[0].lat),Number(data[0].lon)]; localStorage.setItem(key,JSON.stringify(pos)); return pos; }
+    if(data && data[0]) return [Number(data[0].lat),Number(data[0].lon)];
   }catch(e){}
+  return null;
+}
+async function geocodeAsset(a){
+  const manual=assetManualCoord(a); if(manual) return manual;
+  const key='geo_'+norm(locKey(a));
+  try{ const cached=JSON.parse(localStorage.getItem(key)||'null'); if(cached) return cached; }catch{}
+  // Mahalle bilgisi varsa önce gerçek harita araması dene. Çünkü ilçe merkezine düşmek konumu yanıltıyor.
+  let pos=null;
+  if(a.mahalle) pos=await nominatimCoord(a);
+  if(!pos) pos=localCoordFor(a);
+  if(!pos) pos=await nominatimCoord(a);
+  if(pos){ localStorage.setItem(key,JSON.stringify(pos)); return pos; }
   return fallbackCenter();
 }
+function parseCoordInput(raw){
+  const s=String(raw||'').trim(); if(!s) return null;
+  const dec='[-+]?\d{1,2}(?:[.,]\d+)?';
+  const patterns=[
+    new RegExp('@('+dec+'),\s*('+dec+')'),
+    new RegExp('[?&](?:q|ll)=('+dec+'),\s*('+dec+')'),
+    new RegExp('('+dec+')\s*,\s*('+dec+')')
+  ];
+  for(const re of patterns){ const m=s.match(re); if(m){ const lat=Number(m[1].replace(',','.')); const lng=Number(m[2].replace(',','.')); if(Number.isFinite(lat)&&Number.isFinite(lng)) return [lat,lng]; }}
+  return null;
+}
+window.fixAssetLocation=async(type,id)=>{
+  const list=type==='ilan'?cache.ilanlar:cache.portfoyler;
+  const table=type==='ilan'?'ilan_arsivi':'portfoyler';
+  const a=list.find(x=>x.id===id); if(!a) return alert('Kayıt bulunamadı.');
+  const raw=prompt('Konumu düzeltmek için Google Maps linki veya enlem,boylam yaz. Örnek: 41.3514, 41.3060\n\nİpucu: Google Maps’te noktaya basılı tut → paylaş/link kopyala.', assetManualCoord(a)?.join(', ') || '');
+  if(raw===null) return;
+  const coord=parseCoordInput(raw);
+  if(!coord) return alert('Konum okunamadı. Google Maps linki veya 41.3514, 41.3060 formatında yaz.');
+  const d={...assetDetails(a), map_lat:coord[0], map_lng:coord[1], map_source:'manual', map_updated_at:new Date().toISOString()};
+  const {error}=await sb.from(table).update({detaylar:d}).eq('id',id);
+  if(error) return alert('Konum kaydedilemedi: '+error.message);
+  localStorage.removeItem('geo_'+norm(locKey(a)));
+  await loadAll();
+  alert('Konum düzeltildi. Haritada artık bu koordinat kullanılacak.');
+  if(currentSec==='mahalle') renderMahalleTakibi(); else renderSection(currentSec);
+};
 window.initMahalleMap=async(ask=true)=>{
   const status=$('mapStatus');
   const box=$('mahalleMap');
@@ -519,7 +566,7 @@ window.refreshMahalleMap=()=>{
   mahalleMap=null; mahalleLayer=null;
   initMahalleMap(false);
 };
-function markerPopup(a){ const p=assetPhoto(a); const phone=assetPhone(a); const foto=p?`<img src="${esc(p)}" style="width:170px;height:95px;object-fit:cover;border-radius:10px;margin-bottom:6px">`:''; return `<div class="map-popup">${foto}<b>${esc(assetTitle(a))}</b><br><span>${esc([a.islem_tipi,a.tur,a.sehir,a.ilce,a.mahalle].filter(Boolean).join(' / '))}</span><br><b>${money(estatePrice(a))}</b><br>${a.url?`<a target="_blank" href="${esc(a.url)}">İlana git</a><br>`:''}${phone?`${waHtml(phone)} ${callHtml(phone)}`:''}</div>`; }
+function markerPopup(a){ const p=assetPhoto(a); const phone=assetPhone(a); const foto=p?`<img src="${esc(p)}" style="width:170px;height:95px;object-fit:cover;border-radius:10px;margin-bottom:6px">`:''; const typ=a._type==='ilan'?'ilan':'portfoy'; return `<div class="map-popup">${foto}<b>${esc(assetTitle(a))}</b><br><span>${esc([a.islem_tipi,a.tur,a.sehir,a.ilce,a.mahalle].filter(Boolean).join(' / '))}</span><br><span class="muted">${coordAccuracyText(a)}</span><br><b>${money(estatePrice(a))}</b><br>${a.url?`<a target="_blank" href="${esc(a.url)}">İlana git</a><br>`:''}${phone?`${waHtml(phone)} ${callHtml(phone)}`:''}<br><button class="btn small secondary" onclick="fixAssetLocation('${typ}','${a.id}')">Konum Düzelt</button></div>`; }
 function renderMapListFallback(){
   const el=$('mapListFallback'); if(!el) return;
   const rows=allAssets().filter(a=>a.sehir||a.ilce||a.mahalle).slice(0,30);
@@ -538,7 +585,7 @@ window.plotMahalleAssets=async()=>{
     const offLat=((seed%7)-3)*0.00035, offLng=(((seed/7)|0)%7-3)*0.00035;
     L.marker([pos[0]+offLat,pos[1]+offLng]).addTo(mahalleLayer).bindPopup(markerPopup(a));
   }
-  if(status) status.textContent=`${assets.length} kayıt haritada gösterildi.`;
+  if(status) status.textContent=`${assets.length} kayıt haritada gösterildi. Net koordinatı olmayan kayıtlar yaklaşık mahalle/ilçe merkezinde gösterilir.`;
   try{ mahalleMap.invalidateSize(true); }catch(e){}
   if(assets.length) fitMapToAssets();
 };
