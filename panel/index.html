@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mertcan Emlak Komuta Merkezi Cloud</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+</head>
+<body>
+  <div id="loginView" class="login-shell">
+    <div class="login card">
+      <div class="login-logo">🏠</div>
+      <h2>Mertcan Emlak Komuta Merkezi</h2>
+      <p class="muted">Cloud sürüm. V11 görünümü + Supabase kullanıcı ayrımı.</p>
+      <div id="configWarn" class="notice" style="display:none">Supabase ayarı eksik. Aşağıdaki ayar kutusuna Project URL ve anon/publishable key yazıp kaydet.</div>
+      <details id="cloudConfigBox" class="notice" open>
+        <summary><b>Supabase Ayarı</b> — config.js uğraşmadan buradan kaydet</summary>
+        <div class="field"><label>Supabase Project URL</label><input id="cfgUrlInput" placeholder="https://xxxxx.supabase.co" /></div>
+        <div class="field"><label>Supabase anon / publishable key</label><input id="cfgKeyInput" placeholder="eyJ..." /></div>
+        <div class="row">
+          <button class="btn" id="saveCfgBtn" type="button">Supabase Ayarını Kaydet</button>
+          <button class="btn danger" id="clearCfgBtn" type="button">Ayarı Temizle</button>
+        </div>
+        <p id="cfgMsg" class="muted"></p>
+      </details>
+      <div class="field"><label>E-posta</label><input id="loginEmail" type="email" placeholder="ornek@mail.com" /></div>
+      <div class="field"><label>Şifre</label><input id="loginPass" type="password" placeholder="Şifre" /></div>
+      <div class="row">
+        <button class="btn primary" id="loginBtn">Giriş Yap</button>
+        <button class="btn" id="signupBtn">Kayıt Ol</button>
+      </div>
+      <p id="loginMsg" class="muted"></p>
+    </div>
+  </div>
+
+  <div id="appView" style="display:none">
+    <header>
+      <div>
+        <h1>🏠 Mertcan Emlak Komuta Merkezi</h1>
+        <div class="sub">Cloud panel · Sen ve arkadaşın ayrı kullanıcı hesabıyla çalışır · V11 koyu panel görünümü</div>
+      </div>
+      <div class="header-right">
+        <div class="muted" id="userLine"></div>
+        <button id="logoutBtn" class="btn">Çıkış</button>
+      </div>
+    </header>
+
+    <div class="layout">
+      <nav id="nav"></nav>
+      <main>
+        <section id="dashboard" class="section active"></section>
+        <section id="kisiler" class="section"></section>
+        <section id="portfoyler" class="section"></section>
+        <section id="ilanlar" class="section"></section>
+        <section id="eslesme" class="section"></section>
+        <section id="mesajlar" class="section"></section>
+        <section id="gorevler" class="section"></section>
+        <section id="ayarlar" class="section"></section>
+      </main>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
